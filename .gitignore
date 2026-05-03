@@ -1,0 +1,10 @@
+node_modules/
+.local/
+.agents/
+.venv/
+frontend/dist
+tmp/
+__pycache__/
+*.egg-info/
+.env
+.env.local

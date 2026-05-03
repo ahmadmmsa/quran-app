@@ -1,0 +1,21 @@
+{
+  "name": "abrahamic-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT",
+    "backend": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "backend:start": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000",
+    "frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.1"
+  },
+  "engines": {
+    "node": ">=18.x",
+    "npm": ">=9.x"
+  }
+}
