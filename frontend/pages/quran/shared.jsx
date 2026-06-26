@@ -82,7 +82,7 @@ export const getVerseNumberValue = (verse) => verse?.verse_num ?? verse?.versenu
 export const getVerseSurahLabel = (verse, surahs, language, fallbackSurahId) => {
   if (!verse) return ''
   const verseSurahId = getVerseSurahId(verse, null, fallbackSurahId)
-  const surah = surahs.find((item) => item.suraid === Number(verseSurahId))
+  const surah = (Array.isArray(surahs) ? surahs : []).find((item) => item.suraid === Number(verseSurahId))
   return getSurahLabel(surah, language)
 }
 

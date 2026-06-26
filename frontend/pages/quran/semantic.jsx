@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { quranAPI } from '../../api'
 import { getQuranPath } from '../../siteLanguage'
 import { useLanguage } from '../../LanguageContext'
+import { useReader } from '../../ReaderContext'
 import {
   getVerseNumberValue,
   getVerseSurahLabel,
@@ -11,8 +12,8 @@ import {
   getVerseText
 } from './shared'
 import ReaderLayout from '../../components/ReaderLayout'
-import SearchBar from '../../components/SearchBar'
 import Verse from '../../components/Verse'
+import VerseRelated from '../../components/VerseRelated'
 import ChapterSidebar from '../../components/ChapterSidebar'
 
 export default function QuranSemantic() {
@@ -27,18 +28,14 @@ export default function QuranSemantic() {
   const [relatedVersesData, setRelatedVersesData] = useState(null)
   const [treeLoading, setTreeLoading] = useState(false)
   const [treeError, setTreeError] = useState('')
-  const [fontSize, setFontSize] = useState(() => {
-    return parseInt(localStorage.getItem('quran-font-size') || '28')
-  })
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { fontSize, setSidebarOpen } = useReader()
   const [scrolled, setScrolled] = useState(false)
 
   const treeSurahId = Number(routeTreeSurahId)
   const treeVerseNum = Number(routeTreeVerseNum)
 
   useEffect(() => {
-    quranAPI.getSurahs().then((res) => setSurahs(res.data)).catch(console.error)
+    quranAPI.getSurahs().then((res) => setSurahs(Array.isArray(res.data) ? res.data : [])).catch(console.error)
   }, [])
 
   useEffect(() => {
@@ -99,14 +96,7 @@ export default function QuranSemantic() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const handleSearchSubmit = (e) => {
-    if (e && e.preventDefault) e.preventDefault()
-    const trimmedQuery = searchQuery.trim()
-    if (!trimmedQuery) return
-    navigate(`/quran/search/${encodeURIComponent(trimmedQuery)}`)
-  }
-
-  const sidebarItems = surahs.map(surah => ({
+  const sidebarItems = (Array.isArray(surahs) ? surahs : []).map(surah => ({
     id: surah.suraid,
     label: getSurahLabel(surah, language)
   }))
@@ -125,41 +115,7 @@ export default function QuranSemantic() {
   const relatedResults = relatedVersesData?.results || []
 
   return (
-    <ReaderLayout
-      sidebar={sidebarContent}
-      isRtl={isRtl}
-      sidebarOpen={sidebarOpen}
-      setSidebarOpen={setSidebarOpen}
-    >
-      <div className={`reader-header ${scrolled ? 'scrolled' : ''}`}>
-        <div style={{ flex: 1 }}>
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            onSubmit={handleSearchSubmit}
-            placeholder={copy.quranSearchPlaceholder || 'Search Quran...'}
-            isRtl={isRtl}
-            onSidebarToggle={() => setSidebarOpen(true)}
-            searching={treeLoading}
-          />
-        </div>
-
-        <div className="reader-controls" style={{ marginLeft: '1rem' }}>
-          <input
-            type="range"
-            min="16"
-            max="56"
-            value={fontSize}
-            onChange={(e) => {
-              const size = parseInt(e.target.value)
-              setFontSize(size)
-              localStorage.setItem('quran-font-size', size)
-            }}
-            title={copy.fontSize}
-            style={{ width: '80px' }}
-          />
-        </div>
-      </div>
+    <ReaderLayout sidebar={sidebarContent}>
 
       {treeLoading ? (
         <div className="global-spinner-wrapper flex flex-col gap-3">
@@ -173,7 +129,7 @@ export default function QuranSemantic() {
       ) : (
         <>
           <div className="related-verses-selected">
-            <span className="reader-subtitle" style={{ color: 'var(--color-accent)' }}>
+            <span className="reader-subtitle">
               {getVerseSurahLabel(treeSourceVerse, surahs, language)}
             </span>
             <Verse
@@ -189,7 +145,7 @@ export default function QuranSemantic() {
                   <span
                     key={idx}
                     className="px-2 py-1"
-                    style={{ background: 'var(--color-highlight)', color: 'var(--color-accent)', borderRadius: '4px', fontSize: '0.9rem' }}
+                    style={{ background: 'var(--color-highlight)', borderRadius: '4px', fontSize: '0.9rem' }}
                     title={term.pos_ar || term.pos}
                   >
                     {term.term}
@@ -207,7 +163,7 @@ export default function QuranSemantic() {
                     {getVerseSurahLabel(verse, surahs, language)}
                     <a className="related-verses-link" href={`${getQuranPath(language, verse.suranum)}#verse-${verse.versenum}`}>{copy.goToVerse}</a>
                   </div>
-                  <Verse
+                  <VerseRelated
                     verseNum={verse.versenum}
                     language={language}
                     textEn={language === 'en' ? getVerseText(verse, 'en') : null}
@@ -217,7 +173,7 @@ export default function QuranSemantic() {
                   {(verse.matched_terms || []).length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {verse.matched_terms.map((m, i) => (
-                        <span key={i} className="text-muted px-1 text-sm" style={{ background: 'var(--color-bg-secondary)', borderRadius: '2px' }}>{m}</span>
+                        <span key={i} className="px-1 text-sm" style={{ background: 'var(--color-bg-secondary)', borderRadius: '2px' }}>{m}</span>
                       ))}
                     </div>
                   )}

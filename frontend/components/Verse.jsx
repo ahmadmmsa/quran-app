@@ -8,10 +8,17 @@ export default function Verse({
   textHe,
   basmalaParts,
   onClick,
-  fontSize
+  highlightedText
 }) {
   const isBilingual = language === 'ar' ? false : (language === 'he' ? !!textHe : false); 
   const renderText = () => {
+    if (highlightedText) {
+      let className = "verse-text-en";
+      if (language === 'ar') className = "verse-text-ar";
+      else if (language === 'he') className = "verse-text-he";
+      return <p className={className} dangerouslySetInnerHTML={{ __html: highlightedText }} />
+    }
+
     if (language === 'ar' && textAr) {
       return <p className="verse-text-ar">{textAr}</p>
     }
@@ -21,14 +28,12 @@ export default function Verse({
     return <p className="verse-text-en">{textEn}</p>
   }
 
-  const verseStyle = fontSize ? { fontSize: `${fontSize}px` } : {}
-
   if (basmalaParts) {
     return (
-      <div style={verseStyle}>
+      <div>
         <div className="basmala-block">{basmalaParts.basmala}</div>
         {basmalaParts.remainder && (
-          <div className="verse-container" style={verseStyle} onClick={onClick}>
+          <div className="verse-container" onClick={onClick}>
             <span className={`verse-number ${language === 'ar' ? 'verse-number-rtl' : 'verse-number-ltr'}`}>
               {formatVerseNumber(verseNum, language)}
             </span>
@@ -40,7 +45,7 @@ export default function Verse({
   }
 
   return (
-    <div className="verse-container" style={verseStyle} onClick={onClick}>
+    <div className="verse-container" onClick={onClick}>
       <span className={`verse-number ${language === 'ar' ? 'verse-number-rtl' : 'verse-number-ltr'}`}>
         {formatVerseNumber(verseNum, language)}
       </span>

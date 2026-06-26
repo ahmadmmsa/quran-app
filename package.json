@@ -1,15 +1,16 @@
 {
-  "name": "abrahamic-workspace",
+  "name": "quran",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT",
-    "backend": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
-    "backend:start": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000",
+    "start": ".venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8090",
+    "backend": ".venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8090 --reload",
+    "backend:start": ".venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8090",
     "frontend": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
     "build:frontend": "npm --prefix frontend run build",
-    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+    "backend_dev": ".venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8060 --reload",
+    "dev": "concurrently \"npm run backend_dev\" \"npm run frontend\""
   },
   "devDependencies": {
     "concurrently": "^8.2.1"

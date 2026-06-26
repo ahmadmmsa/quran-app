@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { quranAPI } from '../api'
-import { getOntologyConceptViewPath, getOntologyViewPath } from '../siteLanguage'
+import { OntologyConceptPath, OntologyViewPath } from '../siteLanguage'
 import { useLanguage } from '../LanguageContext'
+import { useReader } from '../ReaderContext'
 
 export default function ConceptSidebar({
   title,
@@ -9,6 +10,7 @@ export default function ConceptSidebar({
   onClose
 }) {
   const { language, copy } = useLanguage()
+  const { setSidebarOpen } = useReader()
   const [concepts, setConcepts] = useState([])
 
   useEffect(() => {
@@ -20,15 +22,15 @@ export default function ConceptSidebar({
   return (
     <>
       <div className="reader-sidebar-header">
-        <a href={getOntologyViewPath(language)} className="reader-title">{title || copy.Ontology}</a>
-        <button className="md:hidden" onClick={onClose} aria-label="Close menu">x</button>
+        <a href={OntologyViewPath(language)} className="reader-title">{title || copy.Ontology}</a>
+        <button className="sidebar-toggle-close" onClick={onClose || (() => setSidebarOpen(false))} aria-label={copy.closeMenu || "Close menu"}>&times;</button>
       </div>
       <ul className="reader-sidebar-list">
         {concepts.map(concept => (
           <li
             key={concept.id}
             className={`reader-sidebar-item ${concept.id === activeId ? 'active' : ''}`}
-            onClick={() => window.location.href = getOntologyConceptViewPath(language, concept.id)}
+            onClick={() => window.location.href = OntologyConceptPath(language, concept.id)}
           >
             {concept.display_label}
           </li>

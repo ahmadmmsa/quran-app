@@ -1,58 +1,96 @@
 import axios from 'axios'
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || '/api',
+  timeout: 10000, // 10 seconds timeout
+})
+
+// Add a request interceptor to inject the token
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Add a response interceptor for global error handling
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Log the error globally, or handle specific status codes (e.g., 401, 500)
+    console.error('API Error:', error.response?.data?.detail || error.response?.data?.message || error.message);
+    
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token');
+      window.location.href = '/admin/login';
+    }
+    
+    return Promise.reject(error);
+  }
+)
+
+export const authAPI = {
+  login: (credentials) => apiClient.post('/auth/login', credentials),
+  register: (data) => apiClient.post('/auth/register', data),
+  googleLogin: (token) => apiClient.post('/auth/google', { token }),
+}
 
 export const bibleAPI = {
-  getBooks: () => axios.get(`${API_BASE}/bible/books`),
-  getBook: (bookId) => axios.get(`${API_BASE}/bible/books/${bookId}`),
-  getChaptersCount: (bookId) => axios.get(`${API_BASE}/bible/books/${bookId}/chapters-count`),
+  getBooks: () => apiClient.get('/bible/books'),
+  getBook: (bookId) => apiClient.get(`/bible/books/${bookId}`),
+  getChaptersCount: (bookId) => apiClient.get(`/bible/books/${bookId}/chapters-count`),
   getVerses: (bookId, chapterId) => 
-    axios.get(`${API_BASE}/bible/books/${bookId}/chapters/${chapterId}/verses`),
-  search: (query) => axios.get(`${API_BASE}/bible/search?q=${encodeURIComponent(query)}`)
+    apiClient.get(`/bible/books/${bookId}/chapters/${chapterId}/verses`),
+  search: (query) => apiClient.get('/bible/search', { params: { q: query } })
 }
 
 export const quranAPI = {
-  getSurahs: () => axios.get(`${API_BASE}/quran/surahs`),
-  getVerses: (surahId) => axios.get(`${API_BASE}/quran/surahs/${surahId}/verses`),
-  getTafseerBooks: () => axios.get(`${API_BASE}/quran/tafseer-books`),
+  getSurahs: () => apiClient.get('/quran/surahs'),
+  getVerses: (surahId) => apiClient.get(`/quran/surahs/${surahId}/verses`),
+  getTafseerBooks: () => apiClient.get('/quran/tafseer-books'),
   getTafseer: (surahId, bookId, verseNum) => 
-    axios.get(`${API_BASE}/quran/tafseer/${surahId}/${bookId}/${verseNum}`),
+    apiClient.get(`/quran/tafseer/${surahId}/${bookId}/${verseNum}`),
   getRelatedVerses: (surahId, verseNum, options = {}) => {
-    const params = new URLSearchParams();
-
-    Object.entries(options).forEach(([key, value]) => {
-      if (value === undefined || value === null || value === '') {
-        return
-      }
-
-      params.set(key, String(value))
-    })
-
-    const suffix = params.toString() ? `?${params.toString()}` : ''
-    return axios.get(`${API_BASE}/quran/related-verses/${surahId}/${verseNum}${suffix}`)
+    const cleanOptions = Object.fromEntries(
+      Object.entries(options).filter(([_, value]) => value !== undefined && value !== null && value !== '')
+    )
+    return apiClient.get(`/quran/related-verses/${surahId}/${verseNum}`, { params: cleanOptions })
   },
-  search: (query, options = {}) => {
-    const params = new URLSearchParams({
-      q: String(query || '')
-    })
-
-    Object.entries(options).forEach(([key, value]) => {
-      if (value === undefined || value === null || value === '') {
-        return
+  search: (query, {
+    literalPage = 1, literalPerPage = 20,
+    expansionPage = 1, expansionPerPage = 20,
+    ...options
+  } = {}) => {
+    const cleanOptions = Object.fromEntries(
+      Object.entries(options).filter(([_, value]) => value !== undefined && value !== null && value !== '')
+    )
+    return apiClient.get('/quran/search', {
+      params: {
+        q: String(query || ''),
+        literal_page: literalPage, literal_per_page: literalPerPage,
+        expansion_page: expansionPage, expansion_per_page: expansionPerPage,
+        ...cleanOptions
       }
-
-      params.set(key, String(value))
     })
-
-    return axios.get(`${API_BASE}/quran/search?${params.toString()}`)
   },
-  searchOntologySeeds: (terms, options = {}) => axios.post(`${API_BASE}/quran/ontology/search`, {
+  searchOntologySeeds: (terms, options = {}) => apiClient.post('/quran/ontology/search', {
     terms,
     limit_per_term: options.limitPerTerm ?? 100
   }),
-  createOntologyConcept: (payload) => axios.post(`${API_BASE}/quran/ontology/concepts`, payload),
-  listOntologyConcepts: () => axios.get(`${API_BASE}/quran/ontology/concepts`),
-  getOntologyConcept: (conceptId) => axios.get(`${API_BASE}/quran/ontology/concepts/${conceptId}`),
-  updateOntologyConcept: (conceptId, payload) => axios.put(`${API_BASE}/quran/ontology/concepts/${conceptId}`, payload),
-  deleteOntologyConcept: (conceptId) => axios.delete(`${API_BASE}/quran/ontology/concepts/${conceptId}`)
+  suggestOntologyVerses: ({ text = '', verses = [], limit = 15 } = {}) =>
+    apiClient.post('/quran/ontology/suggest-verses', { text, verses, limit }),
+  createOntologyConcept: (payload) => apiClient.post('/quran/ontology/concepts', payload),
+  listOntologyConcepts: () => apiClient.get('/quran/ontology/concepts'),
+  getOntologyConcept: (conceptId) => apiClient.get(`/quran/ontology/concepts/${conceptId}`),
+  updateOntologyConcept: (conceptId, payload) => apiClient.put(`/quran/ontology/concepts/${conceptId}`, payload),
+  deleteOntologyConcept: (conceptId) => apiClient.delete(`/quran/ontology/concepts/${conceptId}`)
+}
+
+export const adminAPI = {
+  getLocales: () => apiClient.get('/admin/locales'),
+  updateLocales: (payload) => apiClient.post('/admin/locales', payload)
 }

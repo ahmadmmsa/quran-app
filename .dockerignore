@@ -10,3 +10,6 @@ dist
 build
 .vite
 server/
+# DB dumps belong to the db container via a bind mount, not the app image.
+backend/data/*.dump
+quran.conf

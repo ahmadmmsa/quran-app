@@ -1,6 +1,6 @@
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from backend.app.services.search_utils import check_stopword_query, detect_language, highlight_text, parse_search_query, tokenize_generic_text
+from backend.app.services.search_utils import check_stopword_query, detect_language, escape_like, highlight_text, parse_search_query, tokenize_generic_text
 
 
 class BibleService:
@@ -43,7 +43,7 @@ class BibleService:
             return 0
         if self.is_stopword_only_query(query):
             return 0
-        like_term = f"%{parsed.normalized}%"
+        like_term = f"%{escape_like(parsed.normalized)}%"
         row = self.db.execute(text("""
             SELECT COUNT(*) AS count
             FROM bible_verses
@@ -57,7 +57,7 @@ class BibleService:
             return []
         if self.is_stopword_only_query(query):
             return []
-        like_term = f"%{parsed.normalized}%"
+        like_term = f"%{escape_like(parsed.normalized)}%"
         rows = self.db.execute(text("""
             SELECT bv.book AS \"Book\",
                    bv.chapter AS \"Chapter\",
@@ -68,20 +68,39 @@ class BibleService:
                    b.name AS book_name,
                    b.name_ar AS book_name_ar
             FROM bible_verses bv
-            JOIN books b ON b.id = bv.book
+            JOIN bible_chapters b ON b.id = bv.book
             WHERE bv.text ILIKE :term OR bv.text_ar ILIKE :term OR bv.text_he ILIKE :term
             ORDER BY bv.book ASC, bv.chapter ASC, bv.verse_number ASC
             LIMIT :limit OFFSET :offset
         """), {"term": like_term, "limit": limit, "offset": offset})
 
-        query_terms = parsed.phrases or parsed.terms or [parsed.normalized]
+        # Sanitize query terms to ensure no None or empty string values are passed
+        raw_terms = parsed.phrases or parsed.terms or [parsed.normalized]
+        query_terms = [t for t in raw_terms if t]
+
         results = []
         for row in rows:
             item = dict(row._mapping)
-            highlighted = next((highlight_text(candidate, query_terms) for candidate in (item.get("text"), item.get("text_ar"), item.get("text_he")) if candidate), item.get("text", ""))
+            
+            highlighted = ""
+            # Explicitly iterate through languages to find the match
+            for col in ["text", "text_ar", "text_he"]:
+                text_val = item.get(col)
+                if text_val:
+                    processed = highlight_text(text_val, query_terms)
+                    # If the text was modified, we found our highlight
+                    if processed != text_val:
+                        highlighted = processed
+                        break
+            
+            # Fallback to standard English text if highlighting failed or found no match
+            if not highlighted:
+                highlighted = item.get("text", "")
+                
             item["highlighted_text"] = highlighted
             item["search_mode"] = "phrase" if parsed.has_quoted_phrase else "full_text"
             results.append(item)
+            
         return results
 
     def build_generic_related_terms(self, query: str, results: list[dict]) -> list[dict]:

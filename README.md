@@ -1,114 +1,97 @@
-# Abrahamic Scriptures
+# Abrahamic Scriptures (Quran App)
 
-A split React plus FastAPI application for exploring Abrahamic scriptures against PostgreSQL.
+A full-stack application for exploring Abrahamic scriptures, featuring semantic search, ontology management, and a seamless bilingual reading experience.
 
 ## Architecture
 
-- Frontend: Vite + React in `frontend/`
-- Backend: FastAPI + SQLAlchemy in `backend/`
-- Database: PostgreSQL only
-- Default local ports: frontend `5173`, backend `8000`
+- **Frontend**: React + Vite (located in `frontend/`)
+- **Backend**: FastAPI + SQLAlchemy (located in `backend/`)
+- **Database**: PostgreSQL
+- **Containerization**: Docker & Docker Compose
 
 ## Prerequisites
 
-- Node.js 18+
-- Python 3.12+
-- PostgreSQL reachable at `localhost:5432`
-- or using neon
-change .env
-DATABASE_URL=postgresql://neondb_owner:npg_IgmQ9YCx2MHj@ep-polished-frog-al0uhsk4-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require
+- [Node.js](https://nodejs.org/) (v18 or higher)
+- [Python](https://www.python.org/) (v3.12 or higher)
+- [PostgreSQL](https://www.postgresql.org/) (or use a remote instance like Neon)
+- [Docker](https://www.docker.com/) (optional, for containerized deployments)
 
-export to neon
+## Environment Configuration
+
+Configure your application by creating a `.env` file in the root directory based on `.env.example`.
+
+### Key Variables:
+- **Application Ports**: `APP_PORT` (Backend internal), `BACKEND_EXTERNAL_PORT` (Backend exposed via Docker), `FRONTEND_EXTERNAL_PORT` (Frontend exposed via Docker).
+- **Database Configuration**: `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_NAME` or provide a full `DATABASE_URL`.
+- **API Configuration**: `VITE_API_URL` for frontend API requests.
+
+*Note: Ensure your `docker-compose.yml` and `.env` ports align for a seamless startup, as there is a single source of truth for your dynamic ports.*
+
+## Setup and Installation (Local)
+
+1. **Install Frontend Dependencies:**
+   ```bash
+   npm --prefix frontend install
+   ```
+
+2. **Install Backend Dependencies:**
+   ```bash
+   python -m pip install -e .
+   ```
+   *(It is recommended to use a virtual environment like `.venv`)*
+
+3. **Configure Environment Variables:**
+   ```bash
+   cp .env.example .env
+   ```
+   *Edit `.env` with your specific database credentials and port preferences.*
+
+## Running the Application
+
+You can start the backend and frontend using npm scripts defined in the root `package.json`:
+
 ```bash
-sudo -u postgres pg_dump --no-owner --no-privileges -U postgres quran | psql "postgresql://neondb_owner:npg_IgmQ9YCx2MHj@ep-polished-frog-al0uhsk4.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require"
-```
-
-## First-Time Setup
-
-```bash
-npm install
-npm --prefix frontend install
-copy .env.example .env
-python -m pip install -e .
-```
-
-## Run Commands
-
-```bash
-# backend only
+# Start backend
 npm run backend
 
-# frontend only
+# Start frontend
 npm run frontend
-
-# frontend + backend together
-npm run dev
 ```
 
-Frontend runs at `http://localhost:5173` and backend runs at `http://localhost:8000`.
+## Docker Development & Deployment
 
-## Backend Utilities
+### Local Development (Multi-Container)
+For local development, Docker Compose builds separate frontend and backend containers. This enables features like hot-reloading when modifying code files.
 
 ```bash
-# verify PostgreSQL connectivity
-python backend/scripts/check_postgres.py
+# Start all containers in the background with live-reload
+docker compose up -d --build
 
-# apply schema
-python backend/scripts/apply_schema.py
-
-# run backend without reload
-npm run backend:start
-
-# run backend tests
-npm run test:backend
+# Stop the containers
+docker compose down
 ```
 
-## Project Structure
-
-```text
-/
-├── backend/
-│   ├── app/
-│   ├── scripts/
-│   ├── sql/
-│   └── tests/
-├── frontend/
-│   ├── pages/
-│   ├── styles/
-│   ├── App.jsx
-│   ├── api.js
-│   ├── main.jsx
-│   ├── package.json
-│   └── vite.config.js
-├── dist/
-├── package.json
-├── pyproject.toml
-├── Dockerfile
-├── docker-compose.yml
-└── k8s.yaml
-```
-
-## API Surface
-
-### Bible
-- `GET /api/bible/books`
-- `GET /api/bible/books/:id`
-- `GET /api/bible/books/:id/chapters-count`
-- `GET /api/bible/books/:id/chapters/:chapterId/verses`
-- `GET /api/bible/search?q=`
-
-### Quran
-- `GET /api/quran/surahs`
-- `GET /api/quran/surahs/:id/verses`
-- `GET /api/quran/tafseer-books`
-- `GET /api/quran/tafseer/:surah/:book/:verse`
-- `GET /api/quran/related-verses/:surah/:verse`
-- `GET /api/quran/search?q=`
-
-## Container Workflow
+### Production Build (Unified Single-Image)
+For production environments (like Kubernetes), the entire application is packaged into a single, unified Docker image. The FastAPI backend serves the frontend static assets under `/` and the API under `/api`.
 
 ```bash
-docker compose up --build
+# Build the unified image
+docker build -t 192.168.8.25:5000/quran-app:latest .
+
+# Push the image to your registry
+docker push 192.168.8.25:5000/quran-app:latest
 ```
 
-This starts a backend container on `8000` and a frontend container on `5173`.
+## Kubernetes Deployment
+You can deploy the single unified image to your Kubernetes cluster using the provided [k8s.yaml](file:///home/ahmad/repositories/quran-app/k8s.yaml) manifest.
+
+```bash
+# Apply the namespace, secrets, deployment, service, and ingress
+kubectl apply -f k8s.yaml
+```
+
+## Database Initialization
+If using a managed PostgreSQL provider like Neon, you can import an existing database dump:
+```bash
+pg_dump --no-owner --no-privileges -U postgres quran | psql "postgresql://[user]:[password]@[host]/[dbname]?sslmode=require"
+```

@@ -5,3 +5,12 @@ pydantic-settings>=2.1.0
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
 python-dotenv>=1.0.0
+alembic>=1.13.0
+pyjwt>=2.8.0
+bcrypt>=4.0.0
+google-auth>=2.23.0
+requests>=2.31.0
+# Embeds the search query at request time for whole-verse semantic search, and
+# is also used by the offline backfill (backend/scripts/backfill_verse_embeddings.py).
+# ONNX runtime, no torch. The model weights download on first use.
+fastembed>=0.3.0

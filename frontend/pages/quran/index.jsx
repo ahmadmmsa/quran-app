@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { quranAPI } from '../../api'
 import { getQuranPath, getQuranTreePath } from '../../siteLanguage'
 import { useLanguage } from '../../LanguageContext'
+import { useReader } from '../../ReaderContext'
 import {
   getSurahLabel,
   getArabicBasmalaParts,
@@ -10,7 +11,6 @@ import {
 } from './shared'
 import ReaderLayout from '../../components/ReaderLayout'
 import ChapterSidebar from '../../components/ChapterSidebar'
-import SearchBar from '../../components/SearchBar'
 import Verse from '../../components/Verse'
 
 export default function QuranIndex() {
@@ -23,21 +23,18 @@ export default function QuranIndex() {
 
   const [surahs, setSurahs] = useState([])
   const [verses, setVerses] = useState([])
-
-  const [fontSize, setFontSize] = useState(() => { return parseInt(localStorage.getItem('quran-font-size') || '28')})
-
   const [loading, setLoading] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { fontSize, setSidebarOpen } = useReader()
+  
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
-    quranAPI.getSurahs().then((res) => setSurahs(res.data)).catch(console.error)
+    quranAPI.getSurahs().then((res) => setSurahs(Array.isArray(res.data) ? res.data : [])).catch(console.error)
   }, [])
 
   useEffect(() => {
     setLoading(true)
-    quranAPI.getVerses(sid).then(res => setVerses(res.data)).catch(console.error).finally(() => setLoading(false))
+    quranAPI.getVerses(sid).then(res => setVerses(Array.isArray(res.data) ? res.data : [])).catch(console.error).finally(() => setLoading(false))
   }, [sid])
 
   useEffect(() => {
@@ -67,16 +64,9 @@ export default function QuranIndex() {
     navigate(getQuranTreePath(language, sourceSurahId, sourceVerseNum))
   }
 
-  const handleSearch = (e) => {
-    if (e && e.preventDefault) e.preventDefault()
-    const trimmedQuery = searchQuery.trim()
-    if (!trimmedQuery) return
-    navigate(`/quran/search/${encodeURIComponent(trimmedQuery)}`)
-  }
+  const currentSurah = (Array.isArray(surahs) ? surahs : []).find(s => s.suraid === sid)
 
-  const currentSurah = surahs.find(s => s.suraid === sid)
-
-  const sidebarItems = surahs.map(surah => ({
+  const sidebarItems = (Array.isArray(surahs) ? surahs : []).map(surah => ({
     id: surah.suraid,
     label: getSurahLabel(surah, language)
   }))
@@ -92,41 +82,7 @@ export default function QuranIndex() {
   )
 
   return (
-    <ReaderLayout
-      sidebar={sidebarContent}
-      isRtl={isRtl}
-      sidebarOpen={sidebarOpen}
-      setSidebarOpen={setSidebarOpen}
-    >
-      <div className={`reader-header ${scrolled ? 'scrolled' : ''}`}>
-        <div style={{ flex: 1 }}>
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            onSubmit={handleSearch}
-            placeholder={copy.quranSearchPlaceholder || 'Search Quran...'}
-            isRtl={isRtl}
-            onSidebarToggle={() => setSidebarOpen(true)}
-          />
-        </div>
-
-        <div className="reader-controls" style={{ marginLeft: '1rem' }}>
-          <input
-            type="range"
-            min="16"
-            max="56"
-            value={fontSize}
-            onChange={(e) => {
-              const size = parseInt(e.target.value)
-              setFontSize(size)
-              localStorage.setItem('quran-font-size', size)
-            }}
-            title={copy.fontSize}
-            style={{ width: '80px' }}
-          />
-        </div>
-      </div>
-
+    <ReaderLayout sidebar={sidebarContent}>
       {loading ? (
         <div className="global-spinner-wrapper flex flex-col gap-3">
           <svg className="global-spinner" viewBox="0 0 50 50">

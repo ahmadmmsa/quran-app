@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from math import log
 
 from sqlalchemy import bindparam, text
@@ -7,6 +8,8 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from backend.app.services.search_utils import build_arabic_comparison_token, is_arabic_stopword, normalize_arabic_token
+
+logger = logging.getLogger(__name__)
 
 
 def dedupe_preserve_order(values: list[str]) -> list[str]:
@@ -123,7 +126,98 @@ class QuranSemanticRepository:
             morphology_available=morphology_available,
             embeddings_available=embeddings_available,
         )
+        # Verse-level semantic similarity is independent of the lemma embeddings.
+        self._capabilities['verse_embeddings_available'] = self._table_exists('quran_verse_embeddings')
         return self._capabilities
+
+    def fetch_related_verse_candidates(
+        self,
+        source_verse_id: int,
+        *,
+        limit: int = 100,
+        max_distance: float = 0.6,
+    ) -> list[dict]:
+        """Verse-to-verse semantic neighbours using the stored verse embeddings.
+
+        Compares against the source verse's own stored vector, so no embedding
+        model is needed at request time.
+        """
+        if not source_verse_id or not self.get_capabilities().get('verse_embeddings_available'):
+            return []
+
+        stmt = text("""
+            WITH src AS (
+                SELECT embedding FROM quran_verse_embeddings WHERE verse_id = :source_id
+            )
+            SELECT qv.id,
+                   qv.suraid,
+                   qv.verse_num,
+                   (e.embedding <=> src.embedding) AS distance
+            FROM quran_verse_embeddings e
+            CROSS JOIN src
+            JOIN quran_verses qv ON qv.id = e.verse_id
+            WHERE e.verse_id <> :source_id
+            ORDER BY e.embedding <=> src.embedding ASC
+            LIMIT :limit
+        """)
+        try:
+            rows = self.db.execute(stmt, {'source_id': source_verse_id, 'limit': limit})
+            return [
+                {'id': r.id, 'suraid': r.suraid, 'verse_num': r.verse_num, 'score': 1.0 - r.distance}
+                for r in rows
+                if r.distance is not None and r.distance < max_distance
+            ]
+        except Exception:
+            logger.warning("Verse semantic search failed; ensure quran_verse_embeddings is populated", exc_info=True)
+            return []
+
+    def fetch_query_semantic_candidates(
+        self,
+        query_text: str,
+        *,
+        limit: int = 100,
+        max_distance: float = 0.6,
+    ) -> list[dict]:
+        """Whole-verse semantic matches for a free-text query.
+
+        Embeds the full query string (multi-word phrases are handled natively by
+        the sentence model) and ANN-searches the stored verse vectors. Returns []
+        and degrades gracefully if the model or the embeddings table is missing.
+        Stopword-only queries are filtered upstream in QuranService.search before
+        this is ever called.
+        """
+        query_text = str(query_text or '').strip()
+        if not query_text or not self.get_capabilities().get('verse_embeddings_available'):
+            return []
+
+        try:
+            from backend.app.services.embeddings import get_embedding_model, to_pgvector_literal
+
+            query_vector = to_pgvector_literal(get_embedding_model().embed_query(query_text))
+        except Exception:
+            logger.warning("Query embedding failed; is fastembed installed?", exc_info=True)
+            return []
+
+        stmt = text("""
+            SELECT qv.id,
+                   qv.suraid,
+                   qv.verse_num,
+                   (e.embedding <=> CAST(:query_vec AS vector)) AS distance
+            FROM quran_verse_embeddings e
+            JOIN quran_verses qv ON qv.id = e.verse_id
+            ORDER BY e.embedding <=> CAST(:query_vec AS vector) ASC
+            LIMIT :limit
+        """)
+        try:
+            rows = self.db.execute(stmt, {'query_vec': query_vector, 'limit': limit})
+            return [
+                {'id': r.id, 'suraid': r.suraid, 'verse_num': r.verse_num, 'score': 1.0 - r.distance}
+                for r in rows
+                if r.distance is not None and r.distance < max_distance
+            ]
+        except Exception:
+            logger.warning("Query semantic search failed; ensure quran_verse_embeddings is populated", exc_info=True)
+            return []
 
     def build_query_profile(self, terms: list[str], phrases: list[str], language: str) -> dict:
         capabilities = self.get_capabilities()
@@ -196,12 +290,17 @@ class QuranSemanticRepository:
             }
             for key, concept in lemma_concepts.items()
         ]
+        
+        # IDF Gating for Roots to prevent semantic drift from overly common roots
+        ROOT_IDF_THRESHOLD = 3.5 
+        
         profile['root_concepts'] = [
             {
                 **concept,
                 'weight': compute_inverse_size_weight(root_sizes.get(key), corpus_size),
             }
             for key, concept in root_concepts.items()
+            if compute_inverse_size_weight(root_sizes.get(key), corpus_size) >= ROOT_IDF_THRESHOLD
         ]
         return profile
 
@@ -227,100 +326,97 @@ class QuranSemanticRepository:
         rows.extend(self._fetch_morphology_related_terms(profile.get('root_concepts') or [], concept_field='root'))
         return merge_related_term_rows(rows, excluded_terms, limit=limit)
 
-    def fetch_concept_candidate_rows(self, profile: dict, *, exclude_verse_id: int | None = None) -> list[dict]:
+    def fetch_lemma_candidates(self, profile: dict, *, exclude_verse_id: int | None = None) -> list[dict]:
         lemma_keys = [item['concept_key'] for item in profile.get('lemma_concepts') or [] if item.get('concept_key')]
-        root_keys = [item['concept_key'] for item in profile.get('root_concepts') or [] if item.get('concept_key')]
-        if not lemma_keys and not root_keys:
+        if not lemma_keys:
             return []
 
-        concept_conditions: list[str] = []
-        params: dict[str, object] = {}
-        if lemma_keys:
-            concept_conditions.append('mc.lemma IN :lemmas')
-            params['lemmas'] = lemma_keys
-        if root_keys:
-            concept_conditions.append('mc.root IN :roots')
-            params['roots'] = root_keys
-        where_clause = ' OR '.join(f'({condition})' for condition in concept_conditions)
+        params = {'lemmas': lemma_keys}
+        exclude_clause = ""
         if exclude_verse_id is not None:
             params['exclude_verse_id'] = exclude_verse_id
-            where_clause = f'({where_clause}) AND qv.id <> :exclude_verse_id'
+            exclude_clause = "AND qv.id <> :exclude_verse_id"
 
-        compiled = text(
-            f"""
+        # Group to avoid cartesian explosions and only return id/scores
+        stmt = text(f"""
             SELECT qv.id,
                    qv.suraid,
                    qv.verse_num,
-                   qv.verse_txt,
-                   qv.verse_txt_en,
-                   qv.verse_txt_he,
-                   qv.verse_txt_raw,
-                   qv.page,
-                   mc.imlaai_token,
-                   mc.lemma,
-                   COALESCE(NULLIF(mc.lemma_ar, ''), mc.lemma) AS lemma_label,
-                   mc.root,
-                   COALESCE(NULLIF(mc.root_ar, ''), mc.root) AS root_label
+                   MAX(1.0) AS score
             FROM quran_verses qv
-            JOIN quran_arabic_morphology_corpus  mc
-              ON mc.sura_no = qv.suraid
-             AND mc.verse_no = qv.verse_num
-            WHERE {where_clause}
-            ORDER BY qv.suraid ASC, qv.verse_num ASC
-            """
-        )
-        if lemma_keys:
-            compiled = compiled.bindparams(bindparam('lemmas', expanding=True))
-        if root_keys:
-            compiled = compiled.bindparams(bindparam('roots', expanding=True))
-        rows = self.db.execute(compiled, params)
-        return [dict(row._mapping) for row in rows]
+            JOIN quran_arabic_morphology_corpus mc
+              ON mc.sura_no = qv.suraid AND mc.verse_no = qv.verse_num
+            WHERE mc.lemma IN :lemmas {exclude_clause}
+            GROUP BY qv.id, qv.suraid, qv.verse_num
+        """).bindparams(bindparam('lemmas', expanding=True))
+        
+        return [dict(row._mapping) for row in self.db.execute(stmt, params)]
 
-    def fetch_semantic_candidate_rows(
-        self,
-        profile: dict,
-        *,
-        exclude_verse_id: int | None = None
-    ) -> list[dict]:
-        expansions = [
-            item for item in profile.get('semantic_expansions') or []
-            if item.get('normalized_target')
-        ]
-        if not expansions:
+    def fetch_root_candidates(self, profile: dict, *, exclude_verse_id: int | None = None) -> list[dict]:
+        root_keys = [item['concept_key'] for item in profile.get('root_concepts') or [] if item.get('concept_key')]
+        if not root_keys:
             return []
 
-        terms = list({item["normalized_target"] for item in expansions})
-
-        params = {"terms": terms}
-
+        params = {'roots': root_keys}
         exclude_clause = ""
         if exclude_verse_id is not None:
-            exclude_clause = "AND v.id <> :exclude_verse_id"
-            params["exclude_verse_id"] = exclude_verse_id
+            params['exclude_verse_id'] = exclude_verse_id
+            exclude_clause = "AND qv.id <> :exclude_verse_id"
 
-        stmt = text(
-            f"""
-            SELECT DISTINCT
-                v.id,
-                v.suraid,
-                v.verse_num,
-                v.verse_txt,
-                v.verse_txt_en,
-                v.verse_txt_he,
-                v.verse_txt_raw,
-                v.page
-            FROM quran_arabic_morphology_corpus m
-            JOIN quran_verses v
-            ON v.suraid = m.sura_no
-            AND v.verse_num = m.verse_no
-            WHERE m.lemma IN :terms
-            {exclude_clause}
-            ORDER BY v.suraid ASC, v.verse_num ASC
-            """
-        ).bindparams(bindparam("terms", expanding=True))
+        stmt = text(f"""
+            SELECT qv.id,
+                   qv.suraid,
+                   qv.verse_num,
+                   MAX(0.3) AS score
+            FROM quran_verses qv
+            JOIN quran_arabic_morphology_corpus mc
+              ON mc.sura_no = qv.suraid AND mc.verse_no = qv.verse_num
+            WHERE mc.root IN :roots {exclude_clause}
+            GROUP BY qv.id, qv.suraid, qv.verse_num
+        """).bindparams(bindparam('roots', expanding=True))
+        
+        return [dict(row._mapping) for row in self.db.execute(stmt, params)]
 
-        rows = self.db.execute(stmt, params)
-        return [dict(row._mapping) for row in rows]
+    def fetch_embedding_candidates(self, profile: dict, *, exclude_verse_id: int | None = None) -> list[dict]:
+        lemmas = [item['concept_key'] for item in profile.get('lemma_concepts') or [] if item.get('concept_key')]
+        if not lemmas or not self.get_capabilities().get('embeddings_available'):
+            return []
+            
+        params = {'lemmas': lemmas}
+        exclude_clause = ""
+        if exclude_verse_id is not None:
+            params['exclude_verse_id'] = exclude_verse_id
+            exclude_clause = "AND qv.id <> :exclude_verse_id"
+
+        # Collapse all seed embeddings into a single centroid so the distance
+        # comparison is against one query vector. That keeps the scan linear in
+        # the table size (instead of rows x seeds) and lets pgvector use the
+        # HNSW index on `embedding`.
+        stmt = text(f"""
+            WITH seed AS (
+                SELECT AVG(embedding) AS centroid
+                FROM quran_concept_embeddings
+                WHERE lemma IN :lemmas
+            )
+            SELECT qv.id,
+                   qv.suraid,
+                   qv.verse_num,
+                   MIN(e.embedding <=> seed.centroid) AS distance
+            FROM quran_concept_embeddings e
+            CROSS JOIN seed
+            JOIN quran_verses qv ON qv.id = e.verse_id
+            WHERE e.lemma NOT IN :lemmas {exclude_clause}
+            GROUP BY qv.id, qv.suraid, qv.verse_num
+            ORDER BY distance ASC
+            LIMIT 100
+        """).bindparams(bindparam('lemmas', expanding=True))
+
+        try:
+            rows = self.db.execute(stmt, params)
+            return [{'id': r.id, 'suraid': r.suraid, 'verse_num': r.verse_num, 'score': 1.0 - r.distance} for r in rows if r.distance < 0.6]
+        except Exception:
+            logger.warning("Embedding search failed; ensure the pgvector table exists", exc_info=True)
+            return []
 
     def build_source_profile(self, surah_id: int, verse_num: int) -> dict:
         capabilities = self.get_capabilities()
@@ -359,24 +455,29 @@ class QuranSemanticRepository:
         lemma_sizes = self._fetch_lexicon_sizes('lemma_lexicon', 'lemma', lemma_keys)
         root_sizes = self._fetch_lexicon_sizes('root_lexicon', 'root', root_keys)
 
-        lemma_concepts = [
-            {
-                'concept_key': row['lemma'],
-                'display_term': row.get('lemma_label') or row['lemma'],
-                'weight': compute_inverse_size_weight(lemma_sizes.get(row['lemma']), corpus_size),
-            }
-            for row in content_rows
-            if row.get('lemma') and row['lemma'] != '_'
-        ]
-        root_concepts = [
-            {
-                'concept_key': row['root'],
-                'display_term': row.get('root_label') or row['root'],
-                'weight': compute_inverse_size_weight(root_sizes.get(row['root']), corpus_size),
-            }
-            for row in content_rows
-            if row.get('root') and row['root'] != '_'
-        ]
+        lemma_dict = {}
+        for row in content_rows:
+            if row.get('lemma') and row['lemma'] != '_':
+                key = row['lemma']
+                if key not in lemma_dict:
+                    lemma_dict[key] = {
+                        'concept_key': key,
+                        'display_term': row.get('lemma_label') or key,
+                        'weight': compute_inverse_size_weight(lemma_sizes.get(key), corpus_size),
+                    }
+        lemma_concepts = sorted(lemma_dict.values(), key=lambda x: -x['weight'])[:7]
+
+        root_dict = {}
+        for row in content_rows:
+            if row.get('root') and row['root'] != '_':
+                key = row['root']
+                if key not in root_dict:
+                    root_dict[key] = {
+                        'concept_key': key,
+                        'display_term': row.get('root_label') or key,
+                        'weight': compute_inverse_size_weight(root_sizes.get(key), corpus_size),
+                    }
+        root_concepts = sorted(root_dict.values(), key=lambda x: -x['weight'])[:7]
         source_terms = [
             {
                 'term': row.get('imlaai_token') or '',
@@ -479,29 +580,29 @@ class QuranSemanticRepository:
 
         expansions = []
 
-        # 2. Derived forms (same root, cross POS)
+        # 2. Derived forms (same lemma, cross POS)
         derived_stmt = text(
             """
             SELECT DISTINCT
-                root AS source_term,
+                lemma AS source_term,
                 imlaai_token AS target_term,
                 lemma AS normalized_target,
                 derived_nouns,
                 pos
             FROM quran_arabic_morphology_corpus
-            WHERE root IN :roots
+            WHERE lemma IN :lemmas
             AND (
                     derived_nouns IS NOT NULL
                     OR pos IN ('N', 'ADJ')
             )
             """
-        ).bindparams(bindparam("roots", expanding=True))
+        ).bindparams(bindparam("lemmas", expanding=True))
 
-        for row in self.db.execute(derived_stmt, {"roots": roots}):
+        for row in self.db.execute(derived_stmt, {"lemmas": lemmas}):
             expansions.append({
                 "source_term": row.source_term,
                 "target_term": row.target_term,
-                "normalized_target": row.normalized_target,  # now = lemma
+                "normalized_target": row.normalized_target,
                 "relation_type": "derived_form",
                 "weight": 1.0
             })
@@ -510,51 +611,78 @@ class QuranSemanticRepository:
         verb_stmt = text(
             """
             SELECT DISTINCT
-                root AS source_term,
+                lemma AS source_term,
                 imlaai_token AS target_term,
                 lemma AS normalized_target,
                 verb_form
             FROM quran_arabic_morphology_corpus
-            WHERE root IN :roots
+            WHERE lemma IN :lemmas
             AND pos = 'V'
             AND verb_form IS NOT NULL
             """
-        ).bindparams(bindparam("roots", expanding=True))
+        ).bindparams(bindparam("lemmas", expanding=True))
 
-        for row in self.db.execute(verb_stmt, {"roots": roots}):
+        for row in self.db.execute(verb_stmt, {"lemmas": lemmas}):
             expansions.append({
                 "source_term": row.source_term,
                 "target_term": row.target_term,
                 "normalized_target": row.normalized_target,
                 "relation_type": "verb_form",
-                "weight": 0.7
+                "weight": 0.3
             })
 
-        # 4. Syntactic co-occurrence
-        cooccur_stmt = text(
-            """
-            SELECT DISTINCT
-                t1.root AS source_term,
-                t2.imlaai_token AS target_term,
-                t2.lemma AS normalized_target,
-                t1.rel_label
-            FROM quran_arabic_morphology_corpus t1
-            JOIN quran_arabic_morphology_corpus t2
-            ON t1.ref_token_id = t2.token_id
-            WHERE t1.root IN :roots
-            AND t1.rel_label IN ('Subj', 'Obj', 'Poss')
-            AND t2.pos IN ('N', 'V', 'ADJ', 'PN')
-            """
-        ).bindparams(bindparam("roots", expanding=True))
+        # 4. Vector Embedding Expansion
+        capabilities = self.get_capabilities()
+        if capabilities.get('embeddings_available') and lemmas:
+            try:
+                if not hasattr(self, '_vector_info'):
+                    schema_row = self.db.execute(text("""
+                        SELECT table_name, column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public' 
+                          AND (column_name ILIKE '%embedding%' OR udt_name = 'vector')
+                        LIMIT 1
+                    """)).first()
+                    if schema_row:
+                        cols = self.db.execute(text(
+                            "SELECT column_name FROM information_schema.columns WHERE table_name = :t"
+                        ), {"t": schema_row.table_name}).fetchall()
+                        cnames = [r.column_name for r in cols]
+                        id_col = 'lemma' if 'lemma' in cnames else ('term' if 'term' in cnames else cnames[0])
+                        self._vector_info = {'table': schema_row.table_name, 'vector_col': schema_row.column_name, 'id_col': id_col}
+                    else:
+                        self._vector_info = None
 
-        for row in self.db.execute(cooccur_stmt, {"roots": roots}):
-            expansions.append({
-                "source_term": row.source_term,
-                "target_term": row.target_term,
-                "normalized_target": row.normalized_target,
-                "relation_type": "cooccurrence",
-                "weight": 0.5
-            })
+                if self._vector_info:
+                    t_name = self._vector_info['table']
+                    v_col = self._vector_info['vector_col']
+                    i_col = self._vector_info['id_col']
+
+                    vec_stmt = text(f"""
+                        WITH seed_vectors AS (
+                            SELECT {v_col} AS vec, {i_col} AS source_term
+                            FROM {t_name}
+                            WHERE {i_col} IN :lemmas
+                        )
+                        SELECT t.{i_col} AS target_term, sv.source_term, (t.{v_col} <=> sv.vec) AS distance
+                        FROM {t_name} t
+                        JOIN seed_vectors sv ON true
+                        WHERE t.{i_col} NOT IN :lemmas
+                        ORDER BY distance ASC
+                        LIMIT 20
+                    """).bindparams(bindparam("lemmas", expanding=True))
+
+                    for row in self.db.execute(vec_stmt, {"lemmas": lemmas}):
+                        if row.distance < 0.5:
+                            expansions.append({
+                                "source_term": row.source_term,
+                                "target_term": row.target_term,
+                                "normalized_target": row.target_term,
+                                "relation_type": "semantic_embedding",
+                                "weight": 0.9
+                            })
+            except Exception:
+                logger.warning("Embedding expansion failed", exc_info=True)
 
         # deduplicate by lemma (normalized_target)
         dedup = {}
@@ -562,6 +690,16 @@ class QuranSemanticRepository:
             key = e["normalized_target"]
             if key not in dedup or e["weight"] > dedup[key]["weight"]:
                 dedup[key] = e
+
+        # Calculate IDF weights for the target lemmas to scale the static relation weights
+        target_lemmas = list(dedup.keys())
+        corpus_size = self._get_morphology_corpus_size()
+        lemma_sizes = self._fetch_lexicon_sizes('lemma_lexicon', 'lemma', target_lemmas)
+        
+        for e in dedup.values():
+            base_weight = e["weight"]
+            idf = compute_inverse_size_weight(lemma_sizes.get(e["normalized_target"]), corpus_size)
+            e["weight"] = round(base_weight * idf, 4)
 
         return sorted(
             dedup.values(),

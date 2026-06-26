@@ -27,10 +27,18 @@ def get_verses(book_id: int, chapter_id: int, service: BibleService = Depends(ge
 
 @router.get("/search")
 def search_bible(q: str = Query(default=""), limit: int = Query(default=100, ge=1, le=250), offset: int = Query(default=0, ge=0), service: BibleService = Depends(get_service)) -> dict:
+    print(f"DEBUG: Raw Query received: '{q}'") # Check encoding
+    
     stopword_only = service.is_stopword_only_query(q)
     if stopword_only:
+        print("DEBUG: Caught by stopword filter.")
         return {"count": 0, "results": [], "related_terms": [], "limit": limit, "offset": offset, "stopword_only": True}
-    results = service.search_verses(q, limit, offset)
+    
     count = service.count_search_results(q)
+    print(f"DEBUG: Database count found: {count}") # See if the DB finds it but the offset hides it
+    
+    results = service.search_verses(q, limit, offset)
+    print(f"DEBUG: Results returned from service: {len(results)}")
+    
     related_terms = service.build_generic_related_terms(q, results)
     return {"count": count, "results": results, "related_terms": related_terms, "limit": limit, "offset": offset}

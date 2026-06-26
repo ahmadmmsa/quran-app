@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from backend.app.api.ontology_models import OntologyConceptCreateRequest, OntologySearchRequest
+from backend.app.api.ontology_models import OntologyConceptCreateRequest, OntologySearchRequest, OntologySuggestRequest
 from backend.app.session import get_db
 from backend.app.services.quran import QuranService
+from backend.app.api.auth import get_current_admin_user
 
 
 router = APIRouter(prefix="/quran", tags=["quran"])
@@ -28,8 +29,10 @@ def get_related_verses(surah_id: int, verse_num: int, limit: int = Query(default
 @router.get("/search")
 def search_quran(
     q: str = Query(default=""),
-    limit: int = Query(default=100, ge=1, le=250),
-    offset: int = Query(default=0, ge=0),
+    literal_page: int = Query(default=1, ge=1),
+    literal_per_page: int = Query(default=20, ge=0, le=6236),  # 0 = all on one page
+    expansion_page: int = Query(default=1, ge=1),
+    expansion_per_page: int = Query(default=20, ge=0, le=6236),
     semantic: bool | None = Query(default=None),
     root: str | None = Query(default=None),
     lemma: str | None = Query(default=None),
@@ -56,7 +59,14 @@ def search_quran(
         "number": number,
         "person": person,
     }
-    return service.search(q, limit, offset, options)
+    return service.search(
+        q,
+        literal_page=literal_page,
+        literal_per_page=literal_per_page,
+        expansion_page=expansion_page,
+        expansion_per_page=expansion_per_page,
+        options=options,
+    )
 
 @router.post("/ontology/search")
 def search_ontology(
@@ -65,18 +75,26 @@ def search_ontology(
 ) -> dict:
     return service.search_ontology_seed_terms(payload.terms, payload.limit_per_term)
 
+@router.post("/ontology/suggest-verses")
+def suggest_ontology_verses(
+    payload: OntologySuggestRequest,
+    service: QuranService = Depends(get_service),
+) -> dict:
+    verses = [{"surah": v.surah, "verse": v.verse} for v in payload.verses]
+    return service.suggest_concept_verses(payload.text, verses, payload.limit)
+
 @router.post("/ontology/concepts")
 def create_ontology_concept(
     payload: OntologyConceptCreateRequest,
     service: QuranService = Depends(get_service),
+    admin_user: str = Depends(get_current_admin_user),
 ) -> dict:
-    if not payload.terms:
-        raise HTTPException(status_code=400, detail="At least one seed term is required")
-    if not payload.selected_verses:
-        raise HTTPException(status_code=400, detail="At least one verse must be selected")
+    if not payload.label or not payload.label.strip():
+        raise HTTPException(status_code=400, detail="Concept label is required")
 
     return service.create_ontology_concept(
         payload.label,
+        payload.article,
         payload.terms,
         [item.model_dump() for item in payload.selected_verses],
     )
@@ -102,15 +120,15 @@ def update_ontology_concept(
     concept_id: str,
     payload: OntologyConceptCreateRequest,
     service: QuranService = Depends(get_service),
+    admin_user: str = Depends(get_current_admin_user),
 ) -> dict:
-    if not payload.terms:
-        raise HTTPException(status_code=400, detail="At least one seed term is required")
-    if not payload.selected_verses:
-        raise HTTPException(status_code=400, detail="At least one verse must be selected")
+    if not payload.label or not payload.label.strip():
+        raise HTTPException(status_code=400, detail="Concept label is required")
 
     concept = service.update_ontology_concept(
         concept_id,
         payload.label,
+        payload.article,
         payload.terms,
         [item.model_dump() for item in payload.selected_verses],
     )
@@ -122,6 +140,7 @@ def update_ontology_concept(
 def delete_ontology_concept(
     concept_id: str,
     service: QuranService = Depends(get_service),
+    admin_user: str = Depends(get_current_admin_user),
 ) -> dict:
     deleted = service.delete_ontology_concept(concept_id)
     if not deleted:

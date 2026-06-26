@@ -1,28 +1,45 @@
-version: '3.8'
-
 services:
-  backend:
+  app:
+    image: quran-app
+    container_name: quran_app
+    restart: unless-stopped
     build:
       context: .
-      dockerfile: Dockerfile
+      labels:
+        - "quran-app"
+    depends_on:
+      db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    networks:
-      - abrahamic-scriptures-network
+      - "${DOCKER_PORT:-8000}:8000"
+    volumes:
+      - ./quran.conf:/app/quran.conf:ro
+      # Editable locales: admin edits write here and the app serves it live;
+      # persists across rebuilds (it's the build source too).
+      - ./frontend/public/locales.json:/app/frontend/dist/locales.json:rw
+    environment:
+      - PORT=8000
 
-  frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-      args:
-        VITE_API_URL: http://localhost:8000/api
-    ports:
-      - "5173:80"
-    networks:
-      - abrahamic-network
+  db:
+    image: pgvector/pgvector:pg18
+    container_name: postgres_event
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=quran
+      - POSTGRES_PASSWORD=quran
+    volumes:
+      - pgdata:/var/lib/postgresql/18/docker
+      - ./backend/data/quran_full.dump:/dump/quran_full.dump:ro
+      - ./backend/data/quran_verse_embeddings.dump:/dump/quran_verse_embeddings.dump:ro
+      - ./scripts/db-setup.sh:/docker-entrypoint-initdb.d/db-setup.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quran -d quran >/dev/null 2>&1 && [ \"$$(psql -U quran -d quran -tAc 'SELECT count(*) FROM quran_verse_embeddings' 2>/dev/null)\" -gt 0 ]"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 120s
 
-networks:
-  abrahamic-scriptures-network:
-    driver: bridge
+volumes:
+  pgdata:

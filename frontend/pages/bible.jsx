@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { bibleAPI } from '../api'
 import { getBiblePath, getBibleSearchPath } from '../siteLanguage'
 import { useLanguage } from '../LanguageContext'
+import { useReader } from '../ReaderContext'
 import ReaderLayout from '../components/ReaderLayout'
 import ChapterSidebar from '../components/ChapterSidebar'
-import SearchBar from '../components/SearchBar'
 import Verse from '../components/Verse'
 
 export default function BibleReader() {
@@ -17,18 +17,13 @@ export default function BibleReader() {
   const [verses, setVerses] = useState([])
   const [chaptersCount, setChaptersCount] = useState(0)
   const [bookInfo, setBookInfo] = useState(null)
-  const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
   const [relatedTags, setRelatedTags] = useState([])
-
-  // Initialize from CSS variable default or fallback
-  const [fontSize, setFontSize] = useState(() => {
-    return parseInt(localStorage.getItem('bible-font-size') || '18')
-  })
+  const { fontSize, setSidebarOpen, searchQuery, setSearchQuery } = useReader()
 
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [searchError, setSearchError] = useState(null)
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -42,6 +37,7 @@ export default function BibleReader() {
 
     setLoading(true)
     setSearchResults(null)
+    setSearchError(null)
 
     if (searchTerm) {
       setSearchQuery(searchTerm)
@@ -50,7 +46,10 @@ export default function BibleReader() {
           setRelatedTags(res.data.related_terms || [])
           setSearchResults(res.data)
         })
-        .catch(console.error)
+        .catch(err => {
+          console.error(err)
+          setSearchError(err.message || 'An error occurred during search')
+        })
         .finally(() => {
           setLoading(false)
           setSearching(false)
@@ -82,13 +81,7 @@ export default function BibleReader() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const handleSearch = (e) => {
-    if (e && e.preventDefault) e.preventDefault()
-    const trimmedQuery = searchQuery.trim()
-    if (!trimmedQuery) return
-    setSearching(true)
-    navigate(getBibleSearchPath(language, trimmedQuery))
-  }
+
 
   const getBookLabel = (book) => {
     if (!book) return ''
@@ -132,40 +125,8 @@ export default function BibleReader() {
   )
 
   return (
-    <ReaderLayout
-      sidebar={sidebarContent}
-      isRtl={isRTL}
-      sidebarOpen={sidebarOpen}
-      setSidebarOpen={setSidebarOpen}
-    >
-      <div className={`reader-header ${scrolled ? 'scrolled' : ''}`}>
-        <div style={{ flex: 1 }}>
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            onSubmit={handleSearch}
-            placeholder={copy.bibleSearchPlaceholder}
-            onSidebarToggle={() => setSidebarOpen(true)}
-            searching={searching}
-          />
-        </div>
+    <ReaderLayout sidebar={sidebarContent}>
 
-        <div className="reader-controls" style={{ marginLeft: '1rem' }}>
-          <input
-            type="range"
-            min="14"
-            max="32"
-            value={fontSize}
-            onChange={(e) => {
-              const size = parseInt(e.target.value)
-              setFontSize(size)
-              localStorage.setItem('bible-font-size', size)
-            }}
-            title={copy.fontSize}
-            style={{ width: '80px' }}
-          />
-        </div>
-      </div>
 
       {loading ? (
         <div className="global-spinner-wrapper flex flex-col gap-3">
@@ -230,7 +191,11 @@ export default function BibleReader() {
             </div>
           )}
         </div>
-      ) : (
+      ) : searchError ? (
+        <div className="mb-4 rounded-md border px-4 py-3" style={{ backgroundColor: 'rgba(255,0,0,0.1)', borderColor: 'red', color: 'red' }}>
+          Error: {searchError}
+        </div>
+      ) : !term ? (
         <>
           <div className="mb-5">
             <h1 className="reader-title">{getBookLabel(bookInfo)}</h1>
@@ -273,7 +238,7 @@ export default function BibleReader() {
             ))}
           </div>
         </>
-      )}
+      ) : null}
     </ReaderLayout>
   )
 }

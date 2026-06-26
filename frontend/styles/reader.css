@@ -1,4 +1,10 @@
 
+.search-bar{
+  width: 100%;
+}
+.search-bar input{
+  width: 70%;
+}
 .reader-layout {
   display: flex;
   flex-direction: column;
@@ -12,25 +18,43 @@
   max-width: 90%;
   margin: 0 auto;
   width: 100%;
-  padding: var(--space-md);
+  padding: var(--space-sm);
   gap: var(--space-xl);
   position: relative;
 }
 
-/* Sidebar */
-.reader-sidebar {
-  width: 250px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--color-border);
-  padding-right: var(--space-md);
-  display: flex;
-  flex-direction: column;
-  max-height: 100vh;
-  overflow: hidden;
+.reader-global-toolbar {
   position: sticky;
   top: 0;
+  z-index: 1040;
+  background-color: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
 }
 
+.sidebar-toggle-open {
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  font-size: 1.5rem;
+  background: none;
+  border: none;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar-toggle-open:hover {
+  background: none;
+  border: none;
+  opacity: 0.8;
+}
+.sidebar-toggle-close {
+  background: none;
+  right: 20px;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
 .reader-sidebar-header {
   font-family: var(--font-sans);
   font-size: 0.85rem;
@@ -42,6 +66,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.reader-sidebar-header button{
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-size: 1.5rem;
 }
 
 .reader-sidebar-list {
@@ -78,7 +111,7 @@
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
-  font-size: 0.95rem;
+  font-size: 2rem;
   margin-bottom: 2px;
 }
 
@@ -93,18 +126,55 @@
   font-weight: 500;
 }
 
+.reader-sidebar {
+  position: fixed;
+  top: 0;
+  left: -350px;
+  width: 350px;
+  height: 100vh;
+  background-color: var(--color-bg-primary);
+  z-index: 1050;
+  padding: var(--space-md);
+  box-shadow: var(--shadow-md);
+  transition: left 0.3s ease, right 0.3s ease;
+  border-right: 1px solid var(--color-border);
+}
+[dir="rtl"] .reader-sidebar {
+  left: auto;
+  right: -350px;
+  border-right: none;
+  border-left: 1px solid var(--color-border);
+}
+
+.reader-sidebar.open {
+  left: 0;
+}
+[dir="rtl"] .reader-sidebar.open {
+  right: 0;
+}
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 1040;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .sidebar-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
 /* Main Content Area */
 .reader-content {
   flex: 1;
   max-width: var(--reader-max-width);
   margin: 0 auto;
-  padding-bottom: var(--space-2xl);
 }
 
 .reader-header {
-  position: sticky;
-  top: 0;
-  background-color: rgba(var(--color-bg-primary-rgb), 0.95);
   backdrop-filter: blur(8px);
   padding: var(--space-md) 0;
   margin-bottom: var(--space-lg);
@@ -112,8 +182,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid transparent;
-  transition: border-color var(--transition-fast);
 }
 
 .reader-header.scrolled {
@@ -133,17 +201,7 @@
   margin-top: 4px;
 }
 
-.related-verses-link {
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
-  margin-top: 4px;
-  text-decoration: none;
-}
 
-.related-verses-link:hover {
-  color: var(--color-accent);
-  text-decoration: underline;
-}
 
 /* Verse Styling */
 .verse-container {
@@ -230,19 +288,22 @@
   line-height: 2.2;
 }
 
-
-/* Controls */
 .reader-controls {
   display: flex;
   align-items: center;
   gap: var(--space-md);
 }
 
-.related-verses {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
-  padding: var(--space-md);
+.related-verses-link {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  text-decoration: none;
+}
+
+.related-verses-link:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
 }
 
 .related-verses-selected {
@@ -251,10 +312,17 @@
   border-radius: var(--radius-md);
 }
 
+.related-verses {
+  background: rgba(0, 0, 0, 0.034);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+}
 .related-verses-container {
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
+  background: rgba(0, 0, 0, 0.055);
   border: 1px solid var(--color-border);
-  padding: var(--space-md);
+  padding: var(--space-sm);
   border-radius: var(--radius-md);
 }
 
@@ -265,77 +333,3 @@
   margin-bottom: var(--space-md);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .reader-main-container {
-    padding: var(--space-sm);
-  }
-
-  .sidebar-mobile-toggle {
-    top: 12px;
-    left: 12px;
-    z-index: 1030;
-    font-size: 1.3rem;
-    padding: 6px 10px;
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .reader-sidebar {
-    position: fixed;
-    top: 0;
-    left: -280px;
-    width: 280px;
-    height: 100vh;
-    background-color: var(--color-bg-primary);
-    z-index: 1050;
-    padding: var(--space-md);
-    box-shadow: var(--shadow-md);
-    transition: left 0.3s ease;
-    border-right: none;
-  }
-
-  .reader-sidebar.open {
-    left: 0;
-  }
-
-  .sidebar-overlay {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.4);
-    z-index: 1040;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-  }
-
-  .sidebar-overlay.show {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .reader-content {
-    padding: 0 var(--space-sm);
-  }
-}
-
-/* RTL Support */
-[dir="rtl"] .reader-sidebar {
-  border-right: none;
-  border-left: 1px solid var(--color-border);
-  padding-right: 0;
-  padding-left: var(--space-md);
-}
-
-@media (max-width: 768px) {
-  [dir="rtl"] .reader-sidebar {
-    left: auto;
-    right: -280px;
-  }
-
-  [dir="rtl"] .reader-sidebar.open {
-    right: 0;
-  }
-}

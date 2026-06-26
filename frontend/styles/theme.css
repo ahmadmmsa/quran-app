@@ -1,15 +1,15 @@
 :root {
   /* Light Mode Colors */
-  --body-bg: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, rgb(189, 177, 160) 100%);
+  --body-bg: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, #bdb1a0 100%);
   --input-bg: #ffffffa1;
-  --color-bg-primary: #ffffffa1;
-  --color-bg-secondary: #ffffff56;
-  --color-bg-hover: #faf9f6;
+  --color-bg-primary: #cec5b9;
+  --color-bg-secondary: #bdb1a0;
+  --color-bg-hover: #faf9f68f;
   --color-text-primary: #2b2b2b;
   --color-text-secondary: #5c5c5c;
   --color-text-muted: #746b62;
   --color-border: #d5cdc7;
-  --color-accent: #6b5c52;
+  --color-accent: #6b5c52a4;
   /* Soft umber/taupe */
   --color-accent-hover: #4a3e35;
   --color-highlight: rgba(107, 92, 82, 0.1);
@@ -37,6 +37,7 @@
   --reader-max-width: 100%;
   /* Transition */
   --transition-fast: 0.15s ease-in-out;
+   --sidebar-width: 500px;
 }
 
 [data-theme='dark'] {
@@ -85,6 +86,41 @@ input {
 input::placeholder {
   color: var(--color-text-muted);
 }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--color-accent);
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--transition-fast);
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: var(--color-accent-hover);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--color-accent);
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: var(--shadow-sm);
+  border: none;
+}
+
 button {
   background: var(--color-bg-secondary);
   color: var(--color-text-primary);
@@ -140,4 +176,16 @@ body::-webkit-scrollbar-thumb {
 html::-webkit-scrollbar-thumb:hover,
 body::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
+}
+
+.theme-toggle,
+.lang-toggle {
+  background: black;
+  color: white;
+  border: 1px solid gray;
+  border-radius: 4px;
+  padding: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
 }

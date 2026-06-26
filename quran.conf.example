@@ -1,0 +1,38 @@
+# Quran app configuration (odoo-style). Copy to `quran.conf` and edit.
+# One file for all backend config. Section names are organizational only.
+# Precedence: environment variables override these; these override defaults.
+
+[app]
+APP_ENV = production          ; development | production (production enforces real secrets)
+CORS_ORIGINS = *
+
+[database]
+# DB_TYPE picks the connection profile:
+#   docker  -> the bundled Docker `db` service (no SSL)        host: db
+#   local   -> a Postgres on your machine (no SSL)             host: host.docker.internal / localhost
+#   neon    -> Neon serverless (SSL required)
+#   google  -> Google Cloud SQL (SSL required; or /cloudsql/ socket via DB_HOST)
+#   url     -> use DATABASE_URL verbatim (full control)
+DB_TYPE = docker
+DB_HOST = db
+DB_PORT = 5432
+DB_USER = quran
+DB_PASSWORD = quran
+DB_NAME = quran
+; DATABASE_URL = postgresql://USER:PASS@HOST/quran?sslmode=require   ; required when DB_TYPE = url
+
+[security]
+JWT_SECRET_KEY = change-me-in-production
+ALTCHA_HMAC_KEY = change-me-in-production
+GOOGLE_CLIENT_ID =
+
+[embedding]
+# onnxruntime threads for the embedding model (query-time). The offline backfill
+# sets this separately. The model/cache are baked into the image via Dockerfile ENV.
+EMBEDDING_THREADS = 6
+
+[admin]
+# Bootstrap admin, created/promoted by:
+#   docker compose exec app python -m backend.scripts.create_admin
+ADMIN_EMAIL = admin@quran.app
+ADMIN_PASSWORD = change-me

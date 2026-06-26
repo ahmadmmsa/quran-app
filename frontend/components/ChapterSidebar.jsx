@@ -1,15 +1,18 @@
+import { useLanguage } from '../LanguageContext'
+
 export default function ChapterSidebar({
   title,
-  items, // array of { id, label }
+  items,
   activeId,
   onSelect,
   onClose
 }) {
+  const { copy } = useLanguage()
   return (
     <>
       <div className="reader-sidebar-header">
         <span>{title}</span>
-        <button className="md:hidden" onClick={onClose} aria-label="Close menu">x</button>
+        <button className="sidebar-toggle-close" onClick={onClose} aria-label={copy.closeMenu || "Close menu"}>x</button>
       </div>
       <ul className="reader-sidebar-list">
         {items.map(item => (

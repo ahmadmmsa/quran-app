@@ -1,17 +1,16 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { quranAPI } from '../../api'
-import { getOntologyAddPath, getOntologyConceptViewPath, getOntologyEditPath } from '../../siteLanguage'
+import { AdminOntologyAddPath, AdminOntologyConceptPath, AdminOntologyEditPath, OntologyConceptPath } from '../../siteLanguage'
 import { useLanguage } from '../../LanguageContext'
 import ReaderLayout from '../../components/ReaderLayout'
 import ConceptSidebar from '../../components/ConceptSidebar'
 
-export default function OntologyViewPage() {
+export default function OntologyViewPage({ isAdmin = false }) {
   const { language, copy, isRTL } = useLanguage()
   const isRtl = isRTL
   const [concepts, setConcepts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     quranAPI.listOntologyConcepts()
@@ -26,26 +25,35 @@ export default function OntologyViewPage() {
       })
   }, [isRtl])
 
+  const handleDelete = async (concept) => {
+    const confirmed = window.confirm(`Delete ${concept.display_label} and all linked entries?`)
+    if (!confirmed) return
+    try {
+      await quranAPI.deleteOntologyConcept(concept.id)
+      setConcepts((prev) => prev.filter(c => c.id !== concept.id))
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Delete error.')
+    }
+  }
+
   return (
     <ReaderLayout
       sidebar={
         <ConceptSidebar
           title={copy.Ontology}
           language={language}
-          onClose={() => setSidebarOpen(false)}
         />
       }
-      isRtl={isRtl}
-      sidebarOpen={sidebarOpen}
-      setSidebarOpen={setSidebarOpen}
     >
       <div className="mb-5 flex items-center justify-between">
         <div>
           <p className="reader-subtitle">{copy.OntologySubtitle}</p>
         </div>
-        <button onClick={() => window.location.href = getOntologyAddPath(language)}>
-          {copy.OntologyAddNewConcept}
-        </button>
+        {isAdmin && (
+          <button onClick={() => window.location.href = AdminOntologyAddPath(language)}>
+            {copy.OntologyAddNewConcept}
+          </button>
+        )}
       </div>
 
       {error ? <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-red-800">{error}</div> : null}
@@ -77,24 +85,20 @@ export default function OntologyViewPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button style={{ fontSize: '0.85rem' }} onClick={() => window.location.href = getOntologyConceptViewPath(language, concept.id)}>
+                  <button style={{ fontSize: '0.85rem' }} onClick={() => window.location.href = isAdmin ? AdminOntologyConceptPath(language, concept.id) : OntologyConceptPath(language, concept.id)}>
                     {copy.view}
                   </button>
-                  <button style={{ fontSize: '0.85rem' }} onClick={() => window.location.href = getOntologyEditPath(language, concept.id)}>
-                    {copy.edit}
-                  </button>
+                  {isAdmin && (
+                    <>
+                      <button style={{ fontSize: '0.85rem' }} onClick={() => window.location.href = AdminOntologyEditPath(language, concept.id)}>
+                        {copy.edit}
+                      </button>
+                      <button onClick={() => handleDelete(concept)} style={{ background: '#642121', color: '#fff', margin: '0.5rem' }}>
+                        {copy.delete}
+                      </button>
+                    </>
+                  )}
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(concept.terms || []).map((term) => (
-                  <span
-                    key={`${concept.id}-${term}`}
-                    className="px-2 py-1"
-                    style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', borderRadius: '4px', fontSize: '0.8rem' }}
-                  >
-                    {term}
-                  </span>
-                ))}
               </div>
             </div>
           ))}

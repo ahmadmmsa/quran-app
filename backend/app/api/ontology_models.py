@@ -14,5 +14,12 @@ class OntologyVerseLinkRequest(BaseModel):
 
 class OntologyConceptCreateRequest(BaseModel):
     label: str | None = None
+    article: dict | None = None
     terms: list[str] = Field(default_factory=list)
     selected_verses: list[OntologyVerseLinkRequest] = Field(default_factory=list)
+
+
+class OntologySuggestRequest(BaseModel):
+    text: str | None = None
+    verses: list[OntologyVerseLinkRequest] = Field(default_factory=list)
+    limit: int = Field(default=15, ge=1, le=50)

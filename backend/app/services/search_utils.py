@@ -302,6 +302,19 @@ def sanitize_fts_token(token: str | None) -> str:
 def sanitize_phrase(phrase: str | None) -> str:
     return re.sub(r'\s+', ' ', str(phrase or '').replace('"', ' ')).strip()
 
+def escape_like(value: str | None) -> str:
+    """Escape LIKE/ILIKE wildcards so user input is matched literally.
+
+    Postgres uses backslash as the default LIKE escape character, so escaping
+    backslash, percent and underscore is sufficient (no ESCAPE clause needed).
+    """
+    return (
+        str(value or '')
+        .replace('\\', '\\\\')
+        .replace('%', '\\%')
+        .replace('_', '\\_')
+    )
+
 def parse_search_query(value: str | None) -> ParsedSearchQuery:
     normalized = normalize_search_input(value)
     if not normalized:

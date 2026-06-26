@@ -1,16 +1,18 @@
+import json
 from uuid import uuid4
-from sqlalchemy import text
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy import text, bindparam
 from sqlalchemy.orm import Session
 from backend.app.services.search_utils import (
     check_stopword_query,
     detect_language,
+    escape_like,
     highlight_text,
     normalize_arabic_token,
     parse_search_query,
     tokenize_generic_text,
 )
 from backend.app.services.quran_semantic import QuranSemanticRepository
+from backend.app.services.ranking import reciprocal_rank_fusion, rerank_candidates
 
 
 class QuranService:
@@ -61,22 +63,22 @@ class QuranService:
             query_terms = [normalize_arabic_token(term) for term in self._get_query_terms(parsed, language) if normalize_arabic_token(term)]
             for index, phrase in enumerate(parsed.phrases):
                 conditions.append(f"verse_txt_raw ILIKE :phrase_{index}")
-                params[f'phrase_{index}'] = f"%{phrase}%"
+                params[f'phrase_{index}'] = f"%{escape_like(phrase)}%"
                 highlight_terms.append(phrase)
             for index, term in enumerate(query_terms):
                 conditions.append(f"normalized_tokens ILIKE :term_{index}")
-                params[f'term_{index}'] = f"%{term}%"
+                params[f'term_{index}'] = f"%{escape_like(term)}%"
             highlight_terms.extend(self._get_query_terms(parsed, language))
         else:
             column_name = 'verse_txt_he' if language == 'he' else 'verse_txt_en'
             query_terms = [term for term in self._get_query_terms(parsed, language) if term]
             for index, phrase in enumerate(parsed.phrases):
                 conditions.append(f"{column_name} ILIKE :phrase_{index}")
-                params[f'phrase_{index}'] = f"%{phrase}%"
+                params[f'phrase_{index}'] = f"%{escape_like(phrase)}%"
                 highlight_terms.append(phrase)
             for index, term in enumerate(query_terms):
                 conditions.append(f"{column_name} ILIKE :term_{index}")
-                params[f'term_{index}'] = f"%{term}%"
+                params[f'term_{index}'] = f"%{escape_like(term)}%"
                 highlight_terms.append(term)
 
         if not conditions:
@@ -86,7 +88,7 @@ class QuranService:
                 conditions.append('verse_txt_he ILIKE :normalized')
             else:
                 conditions.append('verse_txt_en ILIKE :normalized')
-            params['normalized'] = f"%{parsed.normalized}%"
+            params['normalized'] = f"%{escape_like(parsed.normalized)}%"
             highlight_terms.append(parsed.normalized)
 
         return ' AND '.join(f'({condition})' for condition in conditions), params, [term for term in highlight_terms if term]
@@ -94,210 +96,71 @@ class QuranService:
     def _fetch_direct_candidates(self, parsed, language: str) -> list[dict]:
         where_clause, params, _ = self._build_direct_search_query(parsed, language)
         rows = self.db.execute(text(f"""
-            SELECT id, suraid, verse_num, verse_txt, verse_txt_en, verse_txt_he, verse_txt_raw, page, normalized_tokens
+            SELECT id, suraid, verse_num
             FROM quran_verses
             WHERE {where_clause}
             ORDER BY suraid ASC, verse_num ASC
         """), params)
         return [dict(row._mapping) for row in rows]
 
-    def _match_query_terms(self, row: dict, language: str, profile: dict) -> list[str]:
-        search_text = self._get_highlight_source(row, language)
-        if language == 'ar':
-            normalized_search = normalize_arabic_token(search_text)
-            return [term for term in profile.get('exact_terms') or [] if normalize_arabic_token(term) and normalize_arabic_token(term) in normalized_search]
-
-        lowered = search_text.lower()
-        return [term for term in profile.get('exact_terms') or [] if term.lower() in lowered]
-
-    def _create_result_bucket(self, row: dict, language: str) -> dict:
-        item = {**row}
-        item['versenum'] = item.get('verse_num')
-        item['suranum'] = item.get('suraid')
-        item['_highlight_terms'] = []
-        item['_exact_matches'] = []
-        item['_concept_matches'] = []
-        item['_concept_match_keys'] = set()
-        item['_semantic_matches'] = []
-        item['_score'] = 0.0
-        item['_language'] = language
-        return item
-
-    def _apply_direct_matches(self, bucket: dict, profile: dict) -> None:
-        exact_matches = self._match_query_terms(bucket, bucket['_language'], profile)
-        bucket['_exact_matches'] = exact_matches
-        bucket['_highlight_terms'] = list(dict.fromkeys(bucket['_highlight_terms'] + exact_matches + (profile.get('phrases') or [])))
-        bucket['_score'] += float(len(exact_matches)) * 3.0
-
-    def _apply_concept_row(self, bucket: dict, row: dict, profile: dict) -> None:
-        lemma_weights = {item['concept_key']: float(item.get('weight') or 0.0) for item in profile.get('lemma_concepts') or []}
-        root_weights = {item['concept_key']: float(item.get('weight') or 0.0) for item in profile.get('root_concepts') or []}
-        relation_type = None
-        concept_key = None
-        concept_label = None
-        weight = 0.0
-
-        if row.get('lemma') in lemma_weights:
-            relation_type = 'lemma'
-            concept_key = row.get('lemma')
-            concept_label = row.get('lemma_label') or row.get('lemma')
-            weight = lemma_weights.get(row.get('lemma'), 0.0)
-        elif row.get('root') in root_weights:
-            relation_type = 'root'
-            concept_key = row.get('root')
-            concept_label = row.get('root_label') or row.get('root')
-            weight = root_weights.get(row.get('root'), 0.0)
-
-        if not relation_type or not concept_key:
-            return
-
-        evidence_key = f"{relation_type}:{concept_key}:{row.get('imlaai_token') or ''}"
-        if evidence_key in bucket['_concept_match_keys']:
-            return
-        bucket['_concept_match_keys'].add(evidence_key)
-        bucket['_concept_matches'].append(
-            {
-                'term': row.get('imlaai_token') or '',
-                'concept_key': concept_key,
-                'concept_label': concept_label,
-                'relation_type': relation_type,
-                'weight': round(weight, 4),
-            }
-        )
-        if row.get('imlaai_token'):
-            bucket['_highlight_terms'] = list(dict.fromkeys(bucket['_highlight_terms'] + [row['imlaai_token']]))
-        bucket['_score'] += weight
-
-    def _apply_semantic_row(self, bucket: dict, expansion: dict) -> None:
-        evidence_key = f"semantic:{expansion.get('normalized_target') or expansion.get('target_term') or ''}"
-        if evidence_key in bucket['_concept_match_keys']:
-            return
-        bucket['_concept_match_keys'].add(evidence_key)
-        bucket['_semantic_matches'].append(
-            {
-                'term': expansion.get('target_term') or expansion.get('normalized_target') or '',
-                'relation_type': expansion.get('relation_type') or 'semantic',
-                'source_term': expansion.get('source_term') or '',
-                'weight': round(float(expansion.get('weight') or 0.0), 4),
-            }
-        )
-        if expansion.get('target_term'):
-            bucket['_highlight_terms'] = list(dict.fromkeys(bucket['_highlight_terms'] + [str(expansion['target_term'])]))
-        bucket['_score'] += float(expansion.get('weight') or 0.0)
-
-    def _finalize_search_results(self, buckets: dict[int, dict], profile: dict, offset: int, limit: int) -> list[dict]:
-        finalized: list[dict] = []
-        for item in buckets.values():
-            language = item.pop('_language')
-            highlight_source = self._get_highlight_source(item, language)
-            highlight_terms = item.pop('_highlight_terms')
-            exact_matches = item.pop('_exact_matches')
-            concept_matches = item.pop('_concept_matches')
-            semantic_matches = item.pop('_semantic_matches')
-            item.pop('_concept_match_keys')
-            search_score = round(float(item.pop('_score')), 4)
-            item['verse_txt_highlighted'] = highlight_text(highlight_source, highlight_terms)
-            item['search_mode'] = 'phrase' if profile.get('phrases') else 'hybrid'
-            item['exact_match_count'] = len(exact_matches)
-            item['occurrence_count'] = len(exact_matches) + len(concept_matches) + len(semantic_matches)
-            item['matched_terms'] = exact_matches
-            item['search_score'] = search_score
-            if exact_matches and (concept_matches or semantic_matches):
-                match_type = 'hybrid'
-            elif exact_matches:
-                match_type = 'exact'
-            else:
-                match_type = 'concept'
-            item['match_explanation'] = {
-                'match_type': match_type,
-                'matched_terms': exact_matches,
-                'concept_matches': concept_matches,
-                'semantic_matches': semantic_matches,
-            }
-            finalized.append(item)
-
-        finalized.sort(
-            key=lambda item: (
-                -int(item['exact_match_count'] > 0),
-                -int(item['exact_match_count']),
-                -float(item['search_score']),
-                -int(item['occurrence_count']),
-                item['suraid'],
-                item['verse_num'],
-            )
-        )
-        return finalized[offset:offset + limit]
+    def _fetch_verses_by_ids(self, verse_ids: list[int]) -> list[dict]:
+        if not verse_ids:
+            return []
+        rows = self.db.execute(text("""
+            SELECT id, suraid, verse_num, verse_txt, verse_txt_en, verse_txt_he, verse_txt_raw, page, normalized_tokens
+            FROM quran_verses
+            WHERE id IN :ids
+        """).bindparams(bindparam('ids', expanding=True)), {'ids': verse_ids})
+        return [dict(row._mapping) for row in rows]
 
     def get_related_verses_by_subject(self, surah_id: int, verse_num: int, limit: int = 20) -> dict | None:
         source = self.get_verse_reference(surah_id, verse_num)
         if not source:
             return None
         source_profile = self.semantic.build_source_profile(surah_id, verse_num)
-        candidate_rows = self.semantic.fetch_concept_candidate_rows(
-            {
-                'lemma_concepts': [{'concept_key': key, 'weight': weight} for key, weight in (source_profile.get('lemma_weights') or {}).items()],
-                'root_concepts': [{'concept_key': key, 'weight': weight} for key, weight in (source_profile.get('root_weights') or {}).items()],
-            },
-            exclude_verse_id=source['id'],
-        )
+        search_profile = {
+            'lemma_concepts': [{'concept_key': key, 'weight': weight} for key, weight in (source_profile.get('lemma_weights') or {}).items()],
+            'root_concepts': [{'concept_key': key, 'weight': weight} for key, weight in (source_profile.get('root_weights') or {}).items()],
+        }
+        
+        lemma_cands = self.semantic.fetch_lemma_candidates(search_profile, exclude_verse_id=source['id'])
+        root_cands = self.semantic.fetch_root_candidates(search_profile, exclude_verse_id=source['id'])
+        # True verse-to-verse semantic neighbours from stored verse embeddings.
+        verse_semantic_cands = self.semantic.fetch_related_verse_candidates(source['id'])
 
-        if not candidate_rows:
+        channel_results = {'lemma': lemma_cands, 'root': root_cands, 'verse_semantic': verse_semantic_cands}
+        candidates = reciprocal_rank_fusion(channel_results)
+        
+        top_cands = candidates[:max(200, limit)]
+        verse_ids = [c.verse_id for c in top_cands]
+        
+        if not verse_ids:
             return {"source_verse": {**source, "versenum": source["verse_num"], "suranum": source["suraid"]}, "source_terms": source_profile.get('source_terms') or [], "count": 0, "results": []}
+            
+        hydrated_rows = self._fetch_verses_by_ids(verse_ids)
+        row_map = {r['id']: r for r in hydrated_rows}
+        for c in top_cands:
+            c.verse_data = row_map.get(c.verse_id)
 
-        results_by_id: dict[int, dict] = {}
-        lemma_weights = source_profile.get('lemma_weights') or {}
-        root_weights = source_profile.get('root_weights') or {}
-        for row in candidate_rows:
-            bucket = results_by_id.get(row['id'])
-            if bucket is None:
-                bucket = {**row, 'versenum': row['verse_num'], 'suranum': row['suraid'], 'matched_terms': [], 'match_details': [], 'subject_score': 0.0}
-                results_by_id[row['id']] = bucket
-
-            relation_type = None
-            concept_key = None
-            concept_weight = 0.0
-            if row.get('lemma') in lemma_weights:
-                relation_type = 'lemma'
-                concept_key = row.get('lemma')
-                concept_weight = float(lemma_weights.get(row.get('lemma'), 0.0))
-            elif row.get('root') in root_weights:
-                relation_type = 'root'
-                concept_key = row.get('root')
-                concept_weight = float(root_weights.get(row.get('root'), 0.0))
-
-            if not relation_type or not concept_key:
-                continue
-
-            detail_key = f"{relation_type}:{concept_key}:{row.get('imlaai_token') or ''}"
-            existing_keys = {f"{item['relation_type']}:{item['concept_key']}:{item['term']}" for item in bucket['match_details']}
-            if detail_key in existing_keys:
-                continue
-
-            matched_term = str(row.get('imlaai_token') or '')
-            if matched_term:
-                bucket['matched_terms'].append(matched_term)
-            bucket['match_details'].append(
-                {
-                    'term': matched_term,
-                    'relation_type': relation_type,
-                    'concept_key': concept_key,
-                    'weight': round(concept_weight, 4),
-                }
-            )
-            bucket['subject_score'] = round(float(bucket['subject_score']) + concept_weight, 4)
-
+        reranked = rerank_candidates(top_cands, search_profile)
+        
         results = []
-        for item in results_by_id.values():
-            item['matched_terms'] = list(dict.fromkeys(item['matched_terms']))[:8]
-            item['occurrence_count'] = len(item['match_details'])
+        for c in reranked:
+            if not c.verse_data:
+                continue
+            item = {**c.verse_data}
+            item['versenum'] = item['verse_num']
+            item['suranum'] = item['suraid']
+            item['matched_terms'] = []
+            item['occurrence_count'] = len(c.match_evidence)
             item['verse_txt_highlighted'] = highlight_text(item.get('verse_txt_raw'), item['matched_terms'])
             item['signal_scores'] = {
-                'concepts': len(item['match_details']),
-                'score': item['subject_score'],
+                'concepts': len(c.match_evidence),
+                'score': c.final_score,
             }
             results.append(item)
 
-        results.sort(key=lambda item: (-float(item['subject_score']), -int(item['occurrence_count']), item['suraid'], item['verse_num']))
+        results.sort(key=lambda item: (-float(item['signal_scores']['score']), -int(item['occurrence_count']), item['suraid'], item['verse_num']))
         results = results[:limit]
 
         return {
@@ -306,6 +169,65 @@ class QuranService:
             "count": len(results),
             "results": results,
         }
+
+    def suggest_concept_verses(self, text: str | None, verses: list[dict] | None, limit: int = 15) -> dict:
+        """Semantic verse suggestions for an ontology node.
+
+        Merges two signals: text->verse (embed the node's title/article and ANN
+        search) and verse-to-verse (neighbours of each already-connected verse).
+        Already-connected verses are excluded; multi-signal hits rank higher.
+        """
+        verses = verses or []
+        capabilities = self.semantic.get_capabilities()
+        connected = {
+            (int(v.get('surah') or v.get('suraid') or 0), int(v.get('verse') or v.get('verse_num') or 0))
+            for v in verses
+        }
+
+        merged: dict[int, dict] = {}
+
+        def add(rows: list[dict], source: str) -> None:
+            for row in rows:
+                vid = row['id']
+                score = float(row.get('score') or 0.0)
+                bucket = merged.get(vid)
+                if bucket is None:
+                    merged[vid] = {'id': vid, 'suraid': row['suraid'], 'verse_num': row['verse_num'],
+                                   'score': score, 'sources': {source}}
+                else:
+                    bucket['score'] = max(bucket['score'], score)
+                    bucket['sources'].add(source)
+
+        text = str(text or '').strip()
+        if text:
+            add(self.semantic.fetch_query_semantic_candidates(text, limit=limit * 3), 'text')
+        for ref in connected:
+            source = self.get_verse_reference(ref[0], ref[1])
+            if source:
+                add(self.semantic.fetch_related_verse_candidates(source['id'], limit=limit * 2), 'verses')
+
+        ranked = [c for c in merged.values() if (c['suraid'], c['verse_num']) not in connected]
+        # Small bonus when both signals agree on a verse.
+        ranked.sort(key=lambda c: (-(c['score'] + (0.1 if len(c['sources']) > 1 else 0.0)), c['suraid'], c['verse_num']))
+        ranked = ranked[:limit]
+
+        hydrated = {r['id']: r for r in self._fetch_verses_by_ids([c['id'] for c in ranked])}
+        results = []
+        for c in ranked:
+            verse_data = hydrated.get(c['id'])
+            if not verse_data:
+                continue
+            results.append({
+                **verse_data,
+                'surah': verse_data['suraid'],
+                'verse': verse_data['verse_num'],
+                'suranum': verse_data['suraid'],
+                'versenum': verse_data['verse_num'],
+                'score': round(c['score'], 4),
+                'sources': sorted(c['sources']),
+            })
+
+        return {'count': len(results), 'results': results, 'semantic_capabilities': capabilities}
 
     def search_ontology_seed_terms(self, terms: list[str], limit_per_term: int = 100) -> dict:
         normalized_terms: list[str] = []
@@ -319,19 +241,20 @@ class QuranService:
 
         results_by_reference: dict[tuple[int, int], dict] = {}
 
-        overfetch  = 100
-
         for term in normalized_terms:
             is_stopword_only, _ = check_stopword_query(term)
             if is_stopword_only:
                 continue
 
-            # search_result = self.search(term, limit_per_term, 0, {})            
-            search_result = self.search(term, overfetch, 0, {})
+            search_result = self.search(
+                term,
+                literal_per_page=limit_per_term,
+                expansion_per_page=limit_per_term,
+                options={},
+            )
 
-
-
-            for verse in search_result.get('results') or []:
+            term_verses = (search_result['literal']['results'] + search_result['expansion']['results'])
+            for verse in term_verses:
                 surah = int(verse.get('suraid') or verse.get('suranum') or 0)
                 verse_num = int(verse.get('verse_num') or verse.get('versenum') or 0)
                 if not surah or not verse_num:
@@ -373,15 +296,14 @@ class QuranService:
         return {
             'terms': normalized_terms,
             'count': len(results),
-            # 'results': results,
             'results': results[:20],
         }
 
-    def create_ontology_concept(self, label: str | None, terms: list[str], selected_verses: list[dict]) -> dict:
+    def create_ontology_concept(self, label: str | None, article: dict | None, terms: list[str], selected_verses: list[dict]) -> dict:
         concept_id = uuid4()
-        return self._save_ontology_concept(concept_id, label, terms, selected_verses, replace_existing=False)
+        return self._save_ontology_concept(concept_id, label, article, terms, selected_verses, replace_existing=False)
 
-    def update_ontology_concept(self, concept_id: str, label: str | None, terms: list[str], selected_verses: list[dict]) -> dict | None:
+    def update_ontology_concept(self, concept_id: str, label: str | None, article: dict | None, terms: list[str], selected_verses: list[dict]) -> dict | None:
         concept_exists = self.db.execute(
             text(
                 """
@@ -396,7 +318,7 @@ class QuranService:
         if not concept_exists:
             return None
 
-        return self._save_ontology_concept(concept_id, label, terms, selected_verses, replace_existing=True)
+        return self._save_ontology_concept(concept_id, label, article, terms, selected_verses, replace_existing=True)
 
     def delete_ontology_concept(self, concept_id: str) -> bool:
         concept_exists = self.db.execute(
@@ -448,8 +370,9 @@ class QuranService:
 
         return True
 
-    def _save_ontology_concept(self, concept_id: str | object, label: str | None, terms: list[str], selected_verses: list[dict], *, replace_existing: bool) -> dict:
+    def _save_ontology_concept(self, concept_id: str | object, label: str | None, article: dict | None, terms: list[str], selected_verses: list[dict], *, replace_existing: bool) -> dict:
         concept_label = str(label or '').strip() or None
+        article_json = json.dumps(article) if article is not None else None
 
         normalized_terms: list[str] = []
         seen_terms: set[str] = set()
@@ -490,17 +413,18 @@ class QuranService:
                 }
             )
 
-        with self.db.begin():
+        try:
             if replace_existing:
                 self.db.execute(
                     text(
                         """
                         UPDATE concepts
-                        SET label = :label
+                        SET label = :label,
+                            article = :article
                         WHERE id = :id
                         """
                     ),
-                    {'id': concept_id, 'label': concept_label},
+                    {'id': concept_id, 'label': concept_label, 'article': article_json},
                 )
                 self.db.execute(
                     text(
@@ -524,11 +448,11 @@ class QuranService:
                 self.db.execute(
                     text(
                         """
-                        INSERT INTO concepts (id, label)
-                        VALUES (:id, :label)
+                        INSERT INTO concepts (id, label, article)
+                        VALUES (:id, :label, :article)
                         """
                     ),
-                    {'id': concept_id, 'label': concept_label},
+                    {'id': concept_id, 'label': concept_label, 'article': article_json},
                 )
 
             for term in normalized_terms:
@@ -561,6 +485,10 @@ class QuranService:
                         'source_terms': verse_row['source_terms'],
                     },
                 )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
         return {
             'id': str(concept_id),
@@ -612,7 +540,7 @@ class QuranService:
         concept_row = self.db.execute(
             text(
                 """
-                SELECT id, label, created_at
+                SELECT id, label, article, created_at
                 FROM concepts
                 WHERE id = :concept_id
                 LIMIT 1
@@ -664,72 +592,135 @@ class QuranService:
         concept['verses'] = [dict(row._mapping) for row in verse_rows]
         return concept
 
-    def search(self, query: str, limit: int, offset: int, options: dict | None = None) -> dict:
+    @staticmethod
+    def _slice_page(refs: list[dict], page: int, per_page: int) -> tuple[int, int, list[dict]]:
+        """Return (clamped_page, total_pages, page_slice). per_page <= 0 = all."""
+        total = len(refs)
+        if per_page <= 0:
+            return 1, (1 if total else 0), refs
+        total_pages = (total + per_page - 1) // per_page
+        page = min(max(1, page), total_pages) if total_pages else 1
+        start = (page - 1) * per_page
+        return page, total_pages, refs[start:start + per_page]
+
+    def _build_group_results(self, page_refs: list[dict], hydrated: dict, language: str, profile: dict) -> list[dict]:
+        results = []
+        for item in page_refs:
+            verse_data = hydrated.get(item['id'])
+            if not verse_data:
+                continue
+            res = {**verse_data}
+            res['versenum'] = res['verse_num']
+            res['suranum'] = res['suraid']
+            res['match_group'] = item['group']
+            res['match_channels'] = item['channels']
+            res['search_score'] = item['score']
+            res['search_mode'] = 'phrase' if profile.get('phrases') else 'literal'
+            highlight_source = self._get_highlight_source(res, language)
+            res['verse_txt_highlighted'] = highlight_text(highlight_source, profile.get('exact_terms') or [])
+            results.append(res)
+        return results
+
+    def _empty_search_response(self, *, literal_per_page: int, expansion_per_page: int, search_info: dict) -> dict:
+        empty_block = lambda per_page: {'count': 0, 'page': 1, 'per_page': per_page, 'total_pages': 0, 'results': []}
+        return {
+            'count': 0,
+            'literal': empty_block(literal_per_page),
+            'expansion': empty_block(expansion_per_page),
+            'related_terms': [],
+            'search_info': search_info,
+        }
+
+    def search(
+        self,
+        query: str,
+        *,
+        literal_page: int = 1,
+        literal_per_page: int = 20,
+        expansion_page: int = 1,
+        expansion_per_page: int = 20,
+        options: dict | None = None,
+    ) -> dict:
+        """Grouped search with each group paginated independently.
+
+        Two groups, returned as separate ``literal`` and ``expansion`` blocks,
+        each with its own ``page`` / ``per_page`` / ``total_pages``:
+          1. ``literal``   - every verse that literally contains the query term
+                             (diacritic-insensitive), mushaf order, uncapped.
+          2. ``expansion`` - lemma/root (and, for multi-word queries, whole-verse
+                             semantic) matches that are NOT literal hits.
+        Only the current page of each group is hydrated. ``per_page <= 0`` = all.
+        """
+        literal_page = max(1, int(literal_page or 1))
+        expansion_page = max(1, int(expansion_page or 1))
+        literal_per_page = int(literal_per_page if literal_per_page is not None else 20)
+        expansion_per_page = int(expansion_per_page if expansion_per_page is not None else 20)
+
         parsed = parse_search_query(query)
         capabilities = self.semantic.get_capabilities()
         if not parsed.normalized:
-            return {
-                'count': 0,
-                'results': [],
-                'related_terms': [],
-                'search_info': {
-                    'query_normalized': '',
-                    'language': 'en',
-                    'query_expansions': [],
-                    'semantic_capabilities': capabilities,
-                    'fallback_reason': capabilities.get('fallback_reason'),
-                },
-            }
+            return self._empty_search_response(literal_per_page=literal_per_page, expansion_per_page=expansion_per_page, search_info={
+                'query_normalized': '',
+                'language': 'en',
+                'query_expansions': [],
+                'semantic_capabilities': capabilities,
+                'fallback_reason': capabilities.get('fallback_reason'),
+            })
 
         is_stopword_only, language = check_stopword_query(query)
         if is_stopword_only:
-            return {
-                'count': 0,
-                'results': [],
-                'related_terms': [],
-                'search_info': {
-                    'query_normalized': parsed.normalized,
-                    'language': language,
-                    'query_expansions': [],
-                    'semantic_capabilities': capabilities,
-                    'fallback_reason': capabilities.get('fallback_reason'),
-                    'stopword_only': True,
-                },
-            }
+            return self._empty_search_response(literal_per_page=literal_per_page, expansion_per_page=expansion_per_page, search_info={
+                'query_normalized': parsed.normalized,
+                'language': language,
+                'query_expansions': [],
+                'semantic_capabilities': capabilities,
+                'fallback_reason': capabilities.get('fallback_reason'),
+                'stopword_only': True,
+            })
 
         language = detect_language(parsed.normalized)
         query_terms = self._get_query_terms(parsed, language)
         profile = self.semantic.build_query_profile(query_terms, parsed.phrases, language)
 
-        direct_rows = self._fetch_direct_candidates(parsed, language)
-        concept_rows = self.semantic.fetch_concept_candidate_rows(profile)
-        semantic_rows = self.semantic.fetch_semantic_candidate_rows(profile)
-        expansion_lookup = {
-            item.get('normalized_target'): item
-            for item in profile.get('semantic_expansions') or []
-            if item.get('normalized_target')
+        # --- Group 1: literal matches (ALL verses containing the term) ---
+        direct_rows = self._fetch_direct_candidates(parsed, language)  # ordered sura:verse, uncapped
+        literal_id_set = {r['id'] for r in direct_rows}
+        literal_refs = [
+            {'id': r['id'], 'suraid': r['suraid'], 'verse_num': r['verse_num'],
+             'group': 'literal', 'score': 100.0, 'channels': ['lexical']}
+            for r in direct_rows
+        ]
+
+        # --- Group 2: expansion (lemma/root, + semantic for multi-word queries) ---
+        # A bare keyword gives the sentence model no context, so whole-verse
+        # semantic only runs for multi-word / natural-language queries.
+        is_multi_word_query = len(parsed.normalized.split()) >= 2
+        expansion_channels = {
+            'lemma': self.semantic.fetch_lemma_candidates(profile),
+            'root': self.semantic.fetch_root_candidates(profile),
+            'embedding': self.semantic.fetch_embedding_candidates(profile),
         }
+        if is_multi_word_query:
+            # Multilingual: an English query can surface Arabic verses by meaning.
+            expansion_channels['verse_semantic'] = self.semantic.fetch_query_semantic_candidates(parsed.normalized)
 
-        results_by_id: dict[int, dict] = {}
-        for row in direct_rows:
-            bucket = results_by_id.setdefault(row['id'], self._create_result_bucket(row, language))
-            self._apply_direct_matches(bucket, profile)
+        fused = reciprocal_rank_fusion(expansion_channels)
+        expansion = [c for c in fused if c.verse_id not in literal_id_set]
+        # More channel agreement first, then stronger fusion score, then mushaf order.
+        expansion.sort(key=lambda c: (-len(c.channel_ranks), -c.rrf_score, c.suraid, c.verse_num))
+        expansion_refs = [
+            {'id': c.verse_id, 'suraid': c.suraid, 'verse_num': c.verse_num,
+             'group': 'expansion', 'score': round(c.rrf_score * 10.0, 4),
+             'channels': list(c.channel_ranks.keys())}
+            for c in expansion
+        ]
 
-        for row in concept_rows:
-            bucket = results_by_id.setdefault(row['id'], self._create_result_bucket(row, language))
-            self._apply_concept_row(bucket, row, profile)
+        # --- Paginate each group independently, then hydrate both pages at once ---
+        lit_page, lit_total_pages, lit_slice = self._slice_page(literal_refs, literal_page, literal_per_page)
+        exp_page, exp_total_pages, exp_slice = self._slice_page(expansion_refs, expansion_page, expansion_per_page)
 
-        for row in semantic_rows:
-            bucket = results_by_id.setdefault(row['id'], self._create_result_bucket(row, language))
-            matched_targets = []
-            normalized_tokens = [normalize_arabic_token(token) for token in tokenize_generic_text(row.get('verse_txt_raw'), 'ar')]
-            for token in normalized_tokens:
-                if token in expansion_lookup:
-                    matched_targets.append(expansion_lookup[token])
-            for expansion in matched_targets:
-                self._apply_semantic_row(bucket, expansion)
+        hydrated = {r['id']: r for r in self._fetch_verses_by_ids([item['id'] for item in (lit_slice + exp_slice)])}
 
-        all_results = self._finalize_search_results(results_by_id, profile, 0, len(results_by_id))
         related_terms = self.semantic.get_related_terms(profile)
         search_info = {
             'query_normalized': parsed.normalized,
@@ -754,8 +745,21 @@ class QuranService:
             'fallback_reason': capabilities.get('fallback_reason'),
         }
         return {
-            'count': len(all_results),
-            'results': all_results[offset:offset + limit],
+            'count': len(literal_refs) + len(expansion_refs),
+            'literal': {
+                'count': len(literal_refs),
+                'page': lit_page,
+                'per_page': literal_per_page,
+                'total_pages': lit_total_pages,
+                'results': self._build_group_results(lit_slice, hydrated, language, profile),
+            },
+            'expansion': {
+                'count': len(expansion_refs),
+                'page': exp_page,
+                'per_page': expansion_per_page,
+                'total_pages': exp_total_pages,
+                'results': self._build_group_results(exp_slice, hydrated, language, profile),
+            },
             'related_terms': related_terms,
             'search_info': search_info,
         }

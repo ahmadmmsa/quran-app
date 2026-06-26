@@ -17,7 +17,12 @@ allowed_origins = (
     else [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 )
 
-app = FastAPI(title=settings.app_name)
+app = FastAPI(
+    title=settings.app_name,
+    docs_url=f"{settings.api_prefix}/docs",
+    openapi_url=f"{settings.api_prefix}/openapi.json"
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins or ["*"],
@@ -39,6 +44,9 @@ if frontend_path.exists() and frontend_path.is_dir():
     app.mount("/assets", StaticFiles(directory=frontend_path / "assets"), name="assets")
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
+        file_path = frontend_path / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
         index_path = frontend_path / "index.html"
         if index_path.exists():
             return FileResponse(index_path)
