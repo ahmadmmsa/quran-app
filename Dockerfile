@@ -17,8 +17,9 @@ COPY frontend ./
 RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
-# onnxruntime (pulled in by fastembed) needs the OpenMP runtime at import time.
-RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+# libgomp1: OpenMP runtime for onnxruntime (fastembed). postgresql-client: pg_restore
+# for the app's self-bootstrap (restores the baked dumps on first start).
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=backend /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=backend /usr/local/bin /usr/local/bin

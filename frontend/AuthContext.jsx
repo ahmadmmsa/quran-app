@@ -1,29 +1,25 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { adminAPI } from './api';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(localStorage.getItem('auth_token'));
-  const [isAuthenticated, setIsAuthenticated] = useState(!!token);
+  const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
 
+  // Keep localStorage in sync with the token.
   useEffect(() => {
     if (token) {
       localStorage.setItem('auth_token', token);
-      setIsAuthenticated(true);
     } else {
       localStorage.removeItem('auth_token');
-      setIsAuthenticated(false);
     }
   }, [token]);
 
-  const login = (newToken) => {
-    setToken(newToken);
-  };
+  // Derived (not lagging) so a fresh login is authenticated in the SAME render —
+  // otherwise ProtectedRoute bounces back to /admin/login before the effect runs.
+  const isAuthenticated = !!token;
 
-  const logout = () => {
-    setToken(null);
-  };
+  const login = (newToken) => setToken(newToken);
+  const logout = () => setToken(null);
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, token, login, logout }}>

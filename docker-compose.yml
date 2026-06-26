@@ -31,15 +31,13 @@ services:
       - POSTGRES_PASSWORD=quran
     volumes:
       - pgdata:/var/lib/postgresql/18/docker
-      - ./backend/data/quran_full.dump:/dump/quran_full.dump:ro
-      - ./backend/data/quran_verse_embeddings.dump:/dump/quran_verse_embeddings.dump:ro
-      - ./scripts/db-setup.sh:/docker-entrypoint-initdb.d/db-setup.sh:ro
+    # Just readiness — the app (not an init hook) populates the DB on startup.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U quran -d quran >/dev/null 2>&1 && [ \"$$(psql -U quran -d quran -tAc 'SELECT count(*) FROM quran_verse_embeddings' 2>/dev/null)\" -gt 0 ]"]
+      test: ["CMD-SHELL", "pg_isready -U quran -d quran"]
       interval: 5s
       timeout: 5s
-      retries: 60
-      start_period: 120s
+      retries: 30
+      start_period: 30s
 
 volumes:
   pgdata:

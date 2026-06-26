@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     admin_email: str | None = Field(default=None, alias="ADMIN_EMAIL")
     admin_password: str | None = Field(default=None, alias="ADMIN_PASSWORD")
 
+    # On startup, the app inspects the DB and restores the baked dumps if empty.
+    # Set AUTO_BOOTSTRAP=false to skip (e.g. a DB managed entirely out-of-band).
+    auto_bootstrap: bool = Field(default=True, alias="AUTO_BOOTSTRAP")
+    data_dir: str = Field(default="/app/backend/data", alias="DATA_DIR")
+
     # Verse-level semantic search. embedding_dim must match the migration's
     # vector(...) column; changing the model means re-running the backfill.
     embedding_model_name: str = Field(default="intfloat/multilingual-e5-large", alias="EMBEDDING_MODEL_NAME")

@@ -1,3 +1,5 @@
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,9 +10,23 @@ from sqlalchemy import text
 from backend.app.api.router import api_router
 from backend.app.session import engine
 from backend.app.config import get_settings
+from backend.app.bootstrap import ensure_database_ready
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Self-bootstrap the DB (create/restore/migrate) before serving. Failure is
+    # logged but doesn't crash-loop the process — health/endpoints surface it.
+    try:
+        ensure_database_ready()
+    except Exception:
+        logger.exception("Database bootstrap failed")
+    yield
 allowed_origins = (
     ["*"]
     if settings.cors_origins == "*"
@@ -20,7 +36,8 @@ allowed_origins = (
 app = FastAPI(
     title=settings.app_name,
     docs_url=f"{settings.api_prefix}/docs",
-    openapi_url=f"{settings.api_prefix}/openapi.json"
+    openapi_url=f"{settings.api_prefix}/openapi.json",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
