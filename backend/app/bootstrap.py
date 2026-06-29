@@ -90,6 +90,26 @@ def _restore(database_url: str, dump_path: Path) -> None:
         logger.debug("pg_restore warnings for %s:\n%s", dump_path.name, result.stderr.strip())
 
 
+def _ensure_admin(conn, settings) -> None:
+    """Idempotently create or promote the admin from quran.conf [admin], so a
+    fresh DB (e.g. after `down -v`) never needs manual admin creation."""
+    if not (settings.admin_email and settings.admin_password):
+        return
+    from backend.app.services.auth import get_password_hash
+
+    email = settings.admin_email
+    exists = conn.execute(text("SELECT 1 FROM users WHERE email = :e"), {"e": email}).first()
+    if exists:
+        conn.execute(text("UPDATE users SET is_admin = TRUE WHERE email = :e"), {"e": email})
+        logger.info("Admin ensured (promoted): %s", email)
+    else:
+        conn.execute(
+            text("INSERT INTO users (email, hashed_password, is_admin) VALUES (:e, :p, TRUE)"),
+            {"e": email, "p": get_password_hash(settings.admin_password)},
+        )
+        logger.info("Admin created: %s", email)
+
+
 def _alembic_upgrade() -> None:
     try:
         from alembic import command
@@ -123,6 +143,7 @@ def ensure_database_ready() -> None:
             logger.info("Embeddings restored")
 
         _alembic_upgrade()
+        _ensure_admin(conn, settings)
         logger.info("Database ready.")
     finally:
         conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _LOCK_KEY})
