@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { quranAPI } from '../../api'
 import { useLanguage } from '../../LanguageContext'
 import { AdminOntologyViewPath } from '../../siteLanguage'
@@ -8,6 +8,7 @@ import OntologyEditor from './components/OntologyEditor'
 export default function OntologyEditPage() {
   const { conceptId } = useParams()
   const { language } = useLanguage()
+  const navigate = useNavigate()
   const [concept, setConcept] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -24,7 +25,7 @@ export default function OntologyEditPage() {
 
     try {
       await quranAPI.deleteOntologyConcept(conceptId)
-      window.location.href = AdminOntologyViewPath(language)
+      navigate(AdminOntologyViewPath(language))
     } catch (err) {
       alert(err?.response?.data?.detail || 'Delete error.')
     }

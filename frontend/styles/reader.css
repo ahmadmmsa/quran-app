@@ -174,20 +174,6 @@
   margin: 0 auto;
 }
 
-.reader-header {
-  backdrop-filter: blur(8px);
-  padding: var(--space-md) 0;
-  margin-bottom: var(--space-lg);
-  z-index: 10;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.reader-header.scrolled {
-  border-bottom-color: var(--color-border);
-}
-
 .reader-title {
   font-family: var(--font-serif);
   font-size: 1.75rem;
@@ -221,23 +207,28 @@
 }
 
 .verse-number {
-  padding: 10px;
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin-top: 0.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-hover);
   font-family: var(--font-sans);
-  font-size: 0.75em;
-  color: var(--color-text-muted);
+  font-size: 0.78rem;
   font-weight: 500;
-  vertical-align: super;
+  color: var(--color-accent);
   user-select: none;
 }
 .verse-number-rtl {
-  border-left: 1px solid var(--color-border);
-  margin-left: var(--space-lg);
-  margin-right: 0;
+  margin-left: var(--space-md);
 }
 .verse-number-ltr {
-  border-right: 1px solid var(--color-border);
-  margin-left: 0;
-  margin-right: var(--space-lg);
+  margin-right: var(--space-md);
 }
 
 .verse-text-en {
@@ -264,12 +255,6 @@
   line-height: 2.2;
 }
 
-.verse-bilingual .verse-text-en {
-  margin-top: var(--space-sm);
-  color: var(--color-text-secondary);
-  font-size: 0.9em;
-}
-
 .basmala-block {
   text-align: center;
   font-family: var(--font-arabic);
@@ -294,42 +279,360 @@
   gap: var(--space-md);
 }
 
-.related-verses-link {
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
-  margin-top: 4px;
-  text-decoration: none;
+/* Compact search results */
+.search-result {
+  padding: var(--space-md) 2px;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.related-verses-link:hover {
+.search-result-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.search-result-ref {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.search-result-surah {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  font-weight: 600;
   color: var(--color-accent);
+  cursor: pointer;
+}
+.search-result-surah:hover {
   text-decoration: underline;
 }
 
-.related-verses-selected {
-  margin-bottom: 2.5rem;
-  padding: var(--space-md);
-  border-radius: var(--radius-md);
-}
-
-.related-verses {
-  background: rgba(0, 0, 0, 0.034);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
-  padding: var(--space-sm);
-}
-.related-verses-container {
-  margin-bottom: 2rem;
-  background: rgba(0, 0, 0, 0.055);
+.search-result-num {
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
   border: 1px solid var(--color-border);
-  padding: var(--space-sm);
-  border-radius: var(--radius-md);
+  border-radius: 999px;
+  padding: 2px 9px;
 }
 
-.ontology-form {
-  background-color: var(--color-bg-secondary);
-  padding: var(--space-md);
-  border-radius: var(--radius-md);
+.search-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.verse-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.verse-action-btn:hover {
+  background: var(--color-bg-hover);
+  text-decoration: none;
+}
+.verse-action-btn.is-copied {
+  color: #1f8a5b;
+}
+.verse-action-btn--accent {
+  color: var(--color-accent);
+}
+
+/* Drop the standalone verse spacing when shown inside a search result */
+.search-result .verse-container {
+  margin-bottom: 0;
+  padding: 0;
+  cursor: default;
+}
+.search-result .verse-container:hover {
+  background: transparent;
+}
+
+/* Surah header (reader) */
+.surah-header {
+  text-align: center;
+  padding-bottom: var(--space-xl);
+  border-bottom: 1px solid var(--color-border);
   margin-bottom: var(--space-md);
+}
+.surah-header-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 0.75rem;
+}
+.surah-header-name {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 2rem;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.surah-header-name--ar {
+  font-family: var(--font-arabic);
+  font-size: 2.6rem;
+  line-height: 1.2;
+}
+
+/* Related verses (semantic / tree) */
+.tree-source-card {
+  background: var(--input-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg) var(--space-xl);
+  box-shadow: var(--shadow-md);
+  margin-bottom: var(--space-xl);
+}
+.tree-source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+.tree-source-label {
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.tree-ref-pill {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  background: var(--color-highlight);
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+.tree-source-card .verse-container {
+  margin-bottom: 0;
+  padding: 0;
+  cursor: default;
+}
+.tree-source-card .verse-container:hover {
+  background: transparent;
+}
+.tree-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: var(--space-md);
+}
+.tree-term {
+  font-family: var(--font-arabic);
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  background: var(--color-highlight);
+  border-radius: 6px;
+  padding: 4px 12px;
+}
+.tree-term--sm {
+  font-size: 0.82rem;
+  padding: 2px 9px;
+  border-radius: 5px;
+}
+.tree-related-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+.tree-related-title {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.tree-related-count {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.tree-related-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 0.2rem;
+}
+.tree-matched {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--space-sm);
+}
+.tree-matched-label {
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+/* Chapter pager (bible reader) */
+.chapter-pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0 var(--space-lg);
+}
+.chapter-pager-nav {
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.chapter-pager-nav:hover {
+  background: var(--color-bg-hover);
+  text-decoration: none;
+}
+.chapter-pager-nav:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.chapter-pager-list {
+  flex: 1;
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chapter-pager-list::-webkit-scrollbar {
+  display: none;
+}
+.chapter-chip {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  cursor: pointer;
+}
+.chapter-chip:hover {
+  background: var(--color-bg-hover);
+  text-decoration: none;
+}
+.chapter-chip.active,
+.chapter-chip.active:hover {
+  background: var(--color-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Hide the verse badge when it carries no number (dense list rows use a ref pill instead) */
+.verse-number:empty {
+  display: none;
+}
+
+/* Ontology — concept list */
+.concept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-md);
+}
+.concept-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  background: var(--input-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.concept-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.concept-card-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 0.35rem;
+}
+.concept-card-count {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.concept-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: none;
+}
+
+/* Ontology — concept view tabs */
+.ontology-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-lg);
+}
+.ontology-tab {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+.ontology-tab:hover {
+  color: var(--color-text-primary);
+  background: transparent;
+  text-decoration: none;
+}
+.ontology-tab.active {
+  color: var(--color-accent-hover);
+  border-bottom-color: var(--color-accent-hover);
 }
 

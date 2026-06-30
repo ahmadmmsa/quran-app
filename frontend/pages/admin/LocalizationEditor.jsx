@@ -84,10 +84,9 @@ export default function LocalizationEditor() {
               <option key={l} value={l}>{l.toUpperCase()}</option>
             ))}
           </select>
-          <button 
-            onClick={handleSave} 
+          <button
+            onClick={handleSave}
             disabled={saving}
-            className="action-button primary"
             style={{ padding: '0.5rem 1.5rem', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}
           >
             {saving ? currentCopy.saving || 'Saving...' : currentCopy.save || 'Save'}
@@ -129,7 +128,7 @@ export default function LocalizationEditor() {
         {Object.entries(currentStrings)
           .filter(([key, value]) => key.toLowerCase().includes(searchQuery.toLowerCase()) || String(value || '').toLowerCase().includes(searchQuery.toLowerCase()))
           .map(([key, value]) => (
-          <div key={key} style={{ card: true, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <label style={{ fontWeight: '600', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>{key}</label>
             <input 
               type="text" 

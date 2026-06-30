@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { quranAPI } from '../../../api'
 import { useLanguage } from '../../../LanguageContext'
 import ReaderLayout from '../../../components/ReaderLayout'
@@ -6,17 +6,15 @@ import ConceptSidebar from '../../../components/ConceptSidebar'
 import OntologyDiagram from './OntologyDiagram'
 
 export default function OntologyEditor({ mode = 'create', initialData = null, conceptId = null, onDelete = null }) {
-  const { language, copy, isRTL } = useLanguage()
-  const isRtl = isRTL
-  
+  const { language, copy } = useLanguage()
+
   const [label, setLabel] = useState('')
   const [article, setArticle] = useState(null)
   const [selectedVerses, setSelectedVerses] = useState({})
-  
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saveMessage, setSaveMessage] = useState('')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     if (initialData) {
@@ -59,11 +57,8 @@ export default function OntologyEditor({ mode = 'create', initialData = null, co
   }
 
   return (
-    <ReaderLayout 
-      sidebar={<ConceptSidebar title={copy.Ontology} activeId={conceptId} language={language} onClose={() => setSidebarOpen(false)} />} 
-      isRtl={isRtl} 
-      sidebarOpen={sidebarOpen} 
-      setSidebarOpen={setSidebarOpen}
+    <ReaderLayout
+      sidebar={<ConceptSidebar title={copy.Ontology} activeId={conceptId} />}
     >
       {error && <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-red-800">{error}</div>}
       {saveMessage && <div className="mb-4 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-800">{saveMessage}</div>}

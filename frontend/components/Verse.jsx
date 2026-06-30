@@ -1,4 +1,5 @@
 import { formatVerseNumber } from '../pages/quran/shared'
+import { clickableProps } from './a11y'
 
 export default function Verse({
   verseNum,
@@ -10,7 +11,8 @@ export default function Verse({
   onClick,
   highlightedText
 }) {
-  const isBilingual = language === 'ar' ? false : (language === 'he' ? !!textHe : false); 
+  const containerProps = onClick ? clickableProps(onClick) : {}
+
   const renderText = () => {
     if (highlightedText) {
       let className = "verse-text-en";
@@ -33,7 +35,7 @@ export default function Verse({
       <div>
         <div className="basmala-block">{basmalaParts.basmala}</div>
         {basmalaParts.remainder && (
-          <div className="verse-container" onClick={onClick}>
+          <div className="verse-container" {...containerProps}>
             <span className={`verse-number ${language === 'ar' ? 'verse-number-rtl' : 'verse-number-ltr'}`}>
               {formatVerseNumber(verseNum, language)}
             </span>
@@ -45,7 +47,7 @@ export default function Verse({
   }
 
   return (
-    <div className="verse-container" onClick={onClick}>
+    <div className="verse-container" {...containerProps}>
       <span className={`verse-number ${language === 'ar' ? 'verse-number-rtl' : 'verse-number-ltr'}`}>
         {formatVerseNumber(verseNum, language)}
       </span>

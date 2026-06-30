@@ -48,9 +48,9 @@ export function getQuranSearchPath(language, term) {
   return buildLocalizedPath(language, `/quran/search/${encodeURIComponent(String(term || '').trim())}`);}
 
 export function OntologyViewPath(language) {
-  return '/quran/ontology/concepts';}
+  return buildLocalizedPath(language, '/quran/ontology/concepts');}
 export function OntologyConceptPath(language, conceptId) {
-  return `/quran/ontology/concepts/${conceptId}/view`;}
+  return buildLocalizedPath(language, `/quran/ontology/concepts/${conceptId}/view`);}
 
 export function AdminOntologyAddPath(language) {
   return '/admin/ontology';}

@@ -7,26 +7,25 @@ import { useReader } from '../../ReaderContext'
 import {
   getSurahLabel,
   getArabicBasmalaParts,
-  getVerseText
+  getVerseText,
+  formatVerseNumber
 } from './shared'
 import ReaderLayout from '../../components/ReaderLayout'
 import ChapterSidebar from '../../components/ChapterSidebar'
 import Verse from '../../components/Verse'
+import Spinner from '../../components/Spinner'
 
 export default function QuranIndex() {
   const { surahId: routeSurahId } = useParams()
   const surahId = routeSurahId || '1'
   const sid = parseInt(surahId)
   const navigate = useNavigate()
-  const { language, copy, isRTL } = useLanguage()
-  const isRtl = isRTL
+  const { language, copy } = useLanguage()
 
   const [surahs, setSurahs] = useState([])
   const [verses, setVerses] = useState([])
   const [loading, setLoading] = useState(false)
-  const { fontSize, setSidebarOpen } = useReader()
-  
-  const [scrolled, setScrolled] = useState(false)
+  const { setSidebarOpen } = useReader()
 
   useEffect(() => {
     quranAPI.getSurahs().then((res) => setSurahs(Array.isArray(res.data) ? res.data : [])).catch(console.error)
@@ -47,14 +46,6 @@ export default function QuranIndex() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }, [verses])
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 10)
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
 
   const handleVerseClick = (verse) => {
     const sourceSurahId = verse?.suraid ?? verse?.suranum ?? sid
@@ -84,17 +75,15 @@ export default function QuranIndex() {
   return (
     <ReaderLayout sidebar={sidebarContent}>
       {loading ? (
-        <div className="global-spinner-wrapper flex flex-col gap-3">
-          <svg className="global-spinner" viewBox="0 0 50 50">
-            <circle className="path" cx="25" cy="25" r="20" fill="none" strokeWidth="4"></circle>
-          </svg>
-          <div className="text-muted" style={{ fontFamily: 'var(--font-serif)' }}>{copy.loading}</div>
-        </div>
+        <Spinner label={copy.loading} />
       ) : (
         <>
-          <h1 className="reader-title">{getSurahLabel(currentSurah, language)}</h1>
+          <div className="surah-header">
+            <div className="surah-header-eyebrow">{copy.surah || 'Surah'} {formatVerseNumber(sid, language)} · {formatVerseNumber(verses.length, language)} {copy.ayahs || 'Ayahs'}</div>
+            <h1 className={`surah-header-name ${language === 'ar' ? 'surah-header-name--ar' : ''}`}>{getSurahLabel(currentSurah, language)}</h1>
+          </div>
           <div className="verses-list">
-            {verses.map((verse, idx) => {
+            {verses.map((verse) => {
               const arabicBasmalaParts = getArabicBasmalaParts(verse, language)
 
               // Depending on language, we show Arabic, English, or both
@@ -102,7 +91,7 @@ export default function QuranIndex() {
               const textEn = language === 'en' ? getVerseText(verse, 'en') : null
 
               return (
-                <div key={idx} id={`verse-${verse.verse_num}`}>
+                <div key={verse.verse_num} id={`verse-${verse.verse_num}`}>
                   <Verse
                     verseNum={verse.verse_num}
                     language={language}
@@ -111,7 +100,6 @@ export default function QuranIndex() {
                     textHe={null}
                     basmalaParts={arabicBasmalaParts}
                     onClick={() => handleVerseClick(verse)}
-                    fontSize={fontSize}
                   />
                 </div>
               )

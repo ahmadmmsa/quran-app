@@ -1,73 +1,6 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { getQuranSearchPath, getQuranPath, getHomePath } from '../../siteLanguage'
-
-export function QuranSearchForm({ language, copy, isRtl, initialSearchQuery = '', searching = false, onSidebarToggle }) {
-  const [searchQuery, setSearchQuery] = useState(initialSearchQuery)
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    setSearchQuery(initialSearchQuery)
-  }, [initialSearchQuery])
-
-  const handleSearch = (e) => {
-    e.preventDefault()
-    const trimmedQuery = searchQuery.trim()
-    if (!trimmedQuery) return
-    navigate(getQuranSearchPath(language, trimmedQuery))
-  }
-
-  return (
-    <form onSubmit={handleSearch} className="mb-4 w-full">
-      <div className={`flex flex-wrap items-start gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        {onSidebarToggle && (
-          <button
-            className="quran-hamburger flex md:hidden"
-            onClick={onSidebarToggle}
-            aria-label={copy.surahsMenu}
-            type="button"
-          >
-            <span /><span /><span />
-          </button>
-        )}
-        <input
-          type="text"
-          dir={isRtl ? 'rtl' : 'ltr'}
-          placeholder={copy.quranSearchPlaceholder}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="min-w-[220px] flex-[1_1_280px] rounded-md border border-[var(--color-border)] bg-transparent px-3 py-2 text-[var(--color-text-primary)] outline-none"
-          style={{ minWidth: '220px', flex: '1 1 280px' }}
-        />
-        <button className="search-button rounded-md bg-[var(--color-accent)] px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60" type="submit" disabled={searching}>
-          {searching ? copy.loading : copy.search}
-        </button>
-      </div>
-    </form>
-  )
-}
-
-export function QuranBreadcrumb({ language, copy, activeView }) {
-  return (
-    <nav className="mb-3" aria-label="breadcrumb">
-      <ol className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-muted)]">
-        <li><Link to={getHomePath(language)}>{copy.brand || 'Home'}</Link></li>
-        <li>/</li>
-        <li><Link to={getQuranPath(language)}>{copy.quran || 'Quran'}</Link></li>
-        {activeView && (
-          <>
-            <li>/</li>
-            <li aria-current="page">{activeView}</li>
-          </>
-        )}
-      </ol>
-    </nav>
-  )
-}
-
 const ARABIC_NUMS = '٠١٢٣٤٥٦٧٨٩';
 
-export const toArabicIndic = (num) => String(num ?? "").replace(/\d/g, d => ARABIC_NUMS[d]);
+const toArabicIndic = (num) => String(num ?? "").replace(/\d/g, d => ARABIC_NUMS[d]);
 export const formatVerseNumber = (num, language) => language === 'ar' ? toArabicIndic(num) : String(num ?? '')
 
 export const getSurahLabel = (surah, language) => {
@@ -98,15 +31,20 @@ export const getVerseText = (verse, language) => {
   return verse.verse_txt_en || verse.verse_txt || verse.verse_txt_he || ''
 }
 
-export const renderVerseText = (verse, language, options = {}) => {
-  const { className = '', fontSizePx = 28 } = options
-  const bodyClassName = ['quran-verse-body', `quran-verse-body--${language}`, className].filter(Boolean).join(' ')
-
-  return (
-    <div className={bodyClassName} style={{ fontSize: `${fontSizePx}px` }}>
-      <span className={`quran-verse-text quran-verse-text--${language}`}>{getVerseText(verse, language)}</span>
-    </div>
-  )
+// Builds a clean, paste-friendly block: surah label + reference, the verse, an
+// optional translation, and a trailing citation.
+export const formatVerseForCopy = (verse, surahs, language) => {
+  const surahLabel = getVerseSurahLabel(verse, surahs, language)
+  const surahId = verse?.suranum ?? verse?.suraid ?? ''
+  const verseNum = getVerseNumberValue(verse)
+  const ref = `${surahId}:${verseNum}`
+  const arabic = getVerseText(verse, 'ar')
+  const translation = getVerseText(verse, language === 'ar' ? 'en' : language)
+  const lines = [`${surahLabel} (${ref})`, '']
+  if (arabic) lines.push(arabic)
+  if (translation && translation !== arabic) lines.push('', `\u201c${translation}\u201d`)
+  lines.push('', `\u2014 Qur'an ${ref}`)
+  return lines.join('\n')
 }
 
 const BASMALA_PREFIXES = [

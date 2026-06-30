@@ -3,12 +3,11 @@ import AppRoutes from './AppRoutes';
 import ScrollManager from './components/ScrollManager';
 import { LanguageProvider, useLanguage } from './LanguageContext';
 import { ThemeProvider, useTheme } from './ThemeContext';
-import { getHomePath, getQuranPath, getBiblePath, OntologyViewPath, getBibleSearchPath, SITE_LANGUAGE_OPTIONS } from './siteLanguage';
+import { getHomePath, getQuranPath, getBiblePath, OntologyViewPath, getBibleSearchPath, getQuranSearchPath, isSupportedLanguage, SITE_LANGUAGE_OPTIONS } from './siteLanguage';
 import { ReaderProvider, useReader } from './ReaderContext';
 import SearchBar from './components/SearchBar';
 import { AuthProvider, useAuth } from './AuthContext';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import './App.css';
 
 function AppContent() {
   const { language, setLanguage, copy, isRTL } = useLanguage();
@@ -17,8 +16,10 @@ function AppContent() {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isBibleRoute = location.pathname.startsWith('/bible') || location.pathname.startsWith('/en/bible') || location.pathname.startsWith('/ar/bible') || location.pathname.startsWith('/he/bible');
-  const isQuranRoute = location.pathname.startsWith('/quran') || location.pathname.startsWith('/en/quran') || location.pathname.startsWith('/ar/quran') || location.pathname.startsWith('/he/quran');
+  const segments = location.pathname.split('/').filter(Boolean);
+  const sectionSegment = isSupportedLanguage(segments[0]) ? segments[1] : segments[0];
+  const isBibleRoute = sectionSegment === 'bible';
+  const isQuranRoute = sectionSegment === 'quran';
 
   const handleLanguageChange = (event) => setLanguage(event.target.value);
   const handleSearchSubmit = (e) => {
@@ -28,7 +29,7 @@ function AppContent() {
     if (isBibleRoute) {
       navigate(getBibleSearchPath(language, trimmedQuery));
     } else {
-      navigate(`/quran/search/${encodeURIComponent(trimmedQuery)}`);
+      navigate(getQuranSearchPath(language, trimmedQuery));
     }
   };
 

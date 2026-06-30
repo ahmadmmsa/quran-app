@@ -4,6 +4,7 @@ import {
   buildLocalizedPath,
   DEFAULT_SITE_LANGUAGE,
   isRtlLanguage,
+  isSupportedLanguage,
   resolveSiteLanguage,
   SITE_LANGUAGE_STORAGE_KEY,
   stripLanguageFromPath,
@@ -32,8 +33,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const firstSegment = location.pathname.split('/').filter(Boolean)[0] || ''
-  const storedLanguage = getStoredLanguage()
-  const language = resolveSiteLanguage(firstSegment, storedLanguage) as Language
+  // On non-localized routes (e.g. /admin/*) the active language comes from this
+  // stored preference, so it must live in state to re-render when changed there.
+  const [preferredLanguage, setPreferredLanguage] = useState<Language>(getStoredLanguage())
+  const language = resolveSiteLanguage(firstSegment, preferredLanguage) as Language
   const isRTL = isRtlLanguage(language)
 
   const [locales, setLocales] = useState<Record<Language, LanguageCopy>>({});
@@ -46,7 +49,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       .then(r => r.json())
       .then(data => {
         setLocales(data);
-        setCopy(data[language] || data.en || fallbackCopy);
       })
       .catch(e => {
         console.error("Failed to load locales.json", e);
@@ -54,20 +56,33 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // Single owner of `copy`: pick the active language once locales are loaded,
+  // falling back to English then the minimal fallback.
   useEffect(() => {
-    if (locales[language]) {
-        setCopy(locales[language]);
-    }
+    if (Object.keys(locales).length === 0) return;
+    setCopy(locales[language] || locales.en || fallbackCopy);
   }, [language, locales]);
 
   useEffect(() => {
     localStorage.setItem(SITE_LANGUAGE_STORAGE_KEY, language)
+    // Keep the stored preference in sync when the language is driven by the URL.
+    setPreferredLanguage(language)
     document.documentElement.lang = language
     document.documentElement.dir = isRTL ? 'rtl' : 'ltr'
   }, [isRTL, language])
 
   const setLanguage = (nextLanguage: string) => {
     const resolvedLanguage = resolveSiteLanguage(nextLanguage, language)
+
+    // Non-localized routes (e.g. /admin/*) have no language segment to swap, so
+    // navigating to a localized path would 404 and bounce home. Persist the
+    // preference and re-render in place instead.
+    if (!isSupportedLanguage(firstSegment)) {
+      localStorage.setItem(SITE_LANGUAGE_STORAGE_KEY, resolvedLanguage)
+      setPreferredLanguage(resolvedLanguage)
+      return
+    }
+
     const nextPath = buildLocalizedPath(
       resolvedLanguage,
       stripLanguageFromPath(location.pathname),

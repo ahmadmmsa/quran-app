@@ -122,7 +122,15 @@
     "localesSaved": "تم الحفظ! أعد تحميل الصفحة لرؤية التغييرات.",
     "toggleTheme": "تبديل السمة",
     "toggleMenu": "تبديل القائمة",
-    "closeMenu": "إغلاق القائمة"
+    "closeMenu": "إغلاق القائمة",
+    "ayahs": "آيات",
+    "surah": "سورة",
+    "copy": "نسخ",
+    "copied": "تم النسخ",
+    "goToPassage": "الذهاب إلى المقطع",
+    "matched": "مطابقة",
+    "exploringRelations": "استكشاف العلاقات مع",
+    "relatedVersesHint": "تشترك في الجذور أو الأسماء أو المواضيع مع هذه الآية"
   },
   "en": {
     "themeDarkMode": "Dark mode",
@@ -247,7 +255,15 @@
     "localesSaved": "Saved! Reload the page to see changes.",
     "toggleTheme": "Toggle theme",
     "toggleMenu": "Toggle menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "ayahs": "Ayahs",
+    "surah": "Surah",
+    "copy": "Copy",
+    "copied": "Copied",
+    "goToPassage": "Go to passage",
+    "matched": "matched",
+    "exploringRelations": "Exploring relations to",
+    "relatedVersesHint": "Sharing roots, names or themes with this verse"
   },
   "he": {
     "themeDarkMode": "מצב כהה",
@@ -372,6 +388,14 @@
     "localesSaved": "נשמר! רענן את הדף לראות שינויים.",
     "toggleTheme": "החלף ערכת נושא",
     "toggleMenu": "החלף תפריט",
-    "closeMenu": "סגור תפריט"
+    "closeMenu": "סגור תפריט",
+    "ayahs": "פסוקים",
+    "surah": "סורה",
+    "copy": "העתק",
+    "copied": "הועתק",
+    "goToPassage": "מעבר לקטע",
+    "matched": "תואם",
+    "exploringRelations": "חוקר קשרים אל",
+    "relatedVersesHint": "חולק שורשים, שמות או נושאים עם פסוק זה"
   }
 }

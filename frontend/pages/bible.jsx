@@ -7,6 +7,10 @@ import { useReader } from '../ReaderContext'
 import ReaderLayout from '../components/ReaderLayout'
 import ChapterSidebar from '../components/ChapterSidebar'
 import Verse from '../components/Verse'
+import Spinner from '../components/Spinner'
+import SearchResultCard from '../components/SearchResultCard'
+import RelatedTags, { getTagTerm } from '../components/RelatedTags'
+import useCopyVerse from '../hooks/useCopyVerse'
 
 export default function BibleReader() {
   const { bookId = '0', chapterId = '1', term = '' } = useParams()
@@ -19,12 +23,31 @@ export default function BibleReader() {
   const [bookInfo, setBookInfo] = useState(null)
   const [searchResults, setSearchResults] = useState(null)
   const [relatedTags, setRelatedTags] = useState([])
-  const { fontSize, setSidebarOpen, searchQuery, setSearchQuery } = useReader()
+  const { setSidebarOpen, searchQuery, setSearchQuery } = useReader()
 
   const [loading, setLoading] = useState(false)
-  const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState(null)
-  const [scrolled, setScrolled] = useState(false)
+
+  const getSearchBookLabel = (verse) => {
+    if (language === 'ar') return verse.book_name_ar || verse.book_name
+    return verse.book_name
+  }
+
+  const buildBibleCopyText = (verse) => {
+    const book = getSearchBookLabel(verse)
+    const ref = `${verse.Chapter}:${verse.verse_number}`
+    const primary = language === 'ar'
+      ? (verse.text_ar || verse.text)
+      : language === 'he'
+        ? (verse.text_he || verse.text)
+        : (verse.text || verse.text_ar || verse.text_he)
+    const lines = [`${book} ${ref}`, '']
+    if (primary) lines.push(primary)
+    lines.push('', `— ${book} ${ref}`)
+    return lines.join('\n')
+  }
+
+  const { copiedKey, copyVerse } = useCopyVerse(buildBibleCopyText)
 
   useEffect(() => {
     bibleAPI.getBooks().then(res => setBooks(res.data)).catch(console.error)
@@ -52,7 +75,6 @@ export default function BibleReader() {
         })
         .finally(() => {
           setLoading(false)
-          setSearching(false)
         })
     } else {
       setSearchQuery('')
@@ -68,20 +90,9 @@ export default function BibleReader() {
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }).catch(console.error).finally(() => {
         setLoading(false)
-        setSearching(false)
       })
     }
   }, [bookId, chapterId, term])
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 10)
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
-
-
 
   const getBookLabel = (book) => {
     if (!book) return ''
@@ -89,17 +100,9 @@ export default function BibleReader() {
     return book.name
   }
 
-  const getSearchBookLabel = (verse) => {
-    if (language === 'ar') return verse.book_name_ar || verse.book_name
-    return verse.book_name
-  }
-
-  const getTagTerm = (tag) => typeof tag === 'string' ? tag : tag?.term || ''
-
   const handleRelatedTagClick = (tag) => {
     const tagTerm = getTagTerm(tag)
     if (!tagTerm) return
-    setSearching(true)
     navigate(getBibleSearchPath(language, tagTerm))
   }
 
@@ -127,14 +130,8 @@ export default function BibleReader() {
   return (
     <ReaderLayout sidebar={sidebarContent}>
 
-
       {loading ? (
-        <div className="global-spinner-wrapper flex flex-col gap-3">
-          <svg className="global-spinner" viewBox="0 0 50 50">
-            <circle className="path" cx="25" cy="25" r="20" fill="none" strokeWidth="4"></circle>
-          </svg>
-          <div className="text-muted" style={{ fontFamily: 'var(--font-serif)' }}>{copy.loading}</div>
-        </div>
+        <Spinner label={copy.loading} />
       ) : searchResults !== null ? (
         <div>
           <div className="mb-5">
@@ -146,18 +143,7 @@ export default function BibleReader() {
             </div>
           </div>
 
-          {relatedTags.length > 0 && (
-            <div className="mb-4 flex flex-wrap gap-2">
-              {relatedTags.map((tag) => (
-                <button key={getTagTerm(tag)} type="button" onClick={() => handleRelatedTagClick(tag)}>
-                  {getTagTerm(tag)}
-                  {typeof tag === 'object' && typeof tag?.count === 'number' && (
-                    <span className="ms-2 text-muted text-sm">{tag.count}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+          <RelatedTags tags={relatedTags} onSelect={handleRelatedTagClick} />
 
           {searchResults.stopword_only ? (
             <div className="mb-4 rounded-md border px-4 py-3" style={{ backgroundColor: 'var(--color-bg-secondary)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
@@ -169,25 +155,44 @@ export default function BibleReader() {
             </div>
           ) : (
             <div>
-              {searchResults.results.map((verse, idx) => (
-                <div key={idx} style={{ marginBottom: '2rem' }}>
-                  <div
-                    className="reader-subtitle mb-2"
-                    style={{ cursor: 'pointer', color: 'var(--color-accent)' }}
-                    onClick={() => navigate(getBiblePath(language, verse.Book, verse.Chapter))}
+              {searchResults.results.map((verse) => {
+                const key = `${verse.Book}:${verse.Chapter}:${verse.verse_number}`
+                const copied = copiedKey === key
+                return (
+                  <SearchResultCard
+                    key={key}
+                    label={getSearchBookLabel(verse)}
+                    reference={`${verse.Chapter}:${verse.verse_number}`}
+                    onLabelClick={() => navigate(getBiblePath(language, verse.Book, verse.Chapter))}
+                    actions={
+                      <>
+                        <button
+                          type="button"
+                          className={`verse-action-btn${copied ? ' is-copied' : ''}`}
+                          onClick={() => copyVerse(key, verse)}
+                        >
+                          {copied ? `✓ ${copy.copied || 'Copied'}` : (copy.copy || 'Copy')}
+                        </button>
+                        <button
+                          type="button"
+                          className="verse-action-btn verse-action-btn--accent"
+                          onClick={() => navigate(getBiblePath(language, verse.Book, verse.Chapter))}
+                        >
+                          {copy.goToPassage || 'Go to passage'} →
+                        </button>
+                      </>
+                    }
                   >
-                    {getSearchBookLabel(verse)} - {copy.chapter} {verse.Chapter}, {copy.verse} {verse.verse_number}
-                  </div>
-                  <Verse
-                    verseNum={null}
-                    language={language}
-                    textEn={verse.text}
-                    textAr={verse.text_ar}
-                    textHe={verse.text_he}
-                    fontSize={fontSize}
-                  />
-                </div>
-              ))}
+                    <Verse
+                      verseNum={null}
+                      language={language}
+                      textEn={verse.text}
+                      textAr={verse.text_ar}
+                      textHe={verse.text_he}
+                    />
+                  </SearchResultCard>
+                )
+              })}
             </div>
           )}
         </div>
@@ -197,43 +202,41 @@ export default function BibleReader() {
         </div>
       ) : !term ? (
         <>
-          <div className="mb-5">
-            <h1 className="reader-title">{getBookLabel(bookInfo)}</h1>
-            <h2 className="reader-subtitle">{copy.chapter} {cid}</h2>
+          <div className="surah-header">
+            <div className="surah-header-eyebrow">{copy.chapter} {cid} · {verses.length} {copy.verses || 'Verses'}</div>
+            <h1 className={`surah-header-name ${language === 'ar' ? 'surah-header-name--ar' : ''}`}>{getBookLabel(bookInfo)}</h1>
           </div>
 
-          <div className="mb-4 flex flex-wrap gap-2" style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
-            <button disabled={!prevChapter} onClick={() => navigate(getBiblePath(language, bid, prevChapter))}>
-              {copy.prev}
+          <div className="chapter-pager" style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
+            <button type="button" className="chapter-pager-nav" disabled={!prevChapter} onClick={() => navigate(getBiblePath(language, bid, prevChapter))}>
+              ‹ {copy.prev}
             </button>
-            <div className="flex flex-nowrap gap-1 overflow-auto" style={{ maxWidth: 'calc(100% - 150px)', scrollbarWidth: 'none' }}>
+            <div className="chapter-pager-list">
               {Array.from({ length: chaptersCount }, (_, i) => i + 1).map(ch => (
-                <button key={ch} 
-                  style={{
-                    backgroundColor: ch === cid ? 'var(--color-accent)' : 'transparent',
-                    color: ch === cid ? '#fff' : 'var(--color-text-primary)'
-                  }}
+                <button
+                  key={ch}
+                  type="button"
+                  className={`chapter-chip ${ch === cid ? 'active' : ''}`}
                   onClick={() => navigate(getBiblePath(language, bid, ch))}
                 >
                   {ch}
                 </button>
               ))}
             </div>
-            <button disabled={!nextChapter} onClick={() => navigate(getBiblePath(language, bid, nextChapter))}>
-              {copy.next}
+            <button type="button" className="chapter-pager-nav" disabled={!nextChapter} onClick={() => navigate(getBiblePath(language, bid, nextChapter))}>
+              {copy.next} ›
             </button>
           </div>
 
           <div className="verses-list">
-            {verses.map((verse, idx) => (
+            {verses.map((verse) => (
               <Verse
-                key={idx}
+                key={verse.verse_number}
                 verseNum={verse.verse_number}
                 language={language}
                 textEn={verse.text}
                 textAr={verse.text_ar}
                 textHe={verse.text_he}
-                fontSize={fontSize}
               />
             ))}
           </div>

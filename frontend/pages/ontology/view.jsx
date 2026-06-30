@@ -1,24 +1,24 @@
-import React, { useEffect, useState, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useState, useMemo } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { quranAPI } from '../../api'
 import { AdminOntologyEditPath, AdminOntologyViewPath } from '../../siteLanguage'
 import { useLanguage } from '../../LanguageContext'
-import { useReader } from '../../ReaderContext'
 import ReaderLayout from '../../components/ReaderLayout'
 import ConceptSidebar from '../../components/ConceptSidebar'
 import OntologyVerseList from './components/OntologyVerseList'
 import OntologyDiagram from './components/OntologyDiagram'
+import Spinner from '../../components/Spinner'
 import { normalizeVerse, getSurahLabel as getSurahLabelUtil } from './utils'
 
 export default function OntologyConceptViewPage({ isAdmin = false }) {
   const { conceptId } = useParams()
   const { language, copy, isRTL } = useLanguage()
   const isRtl = isRTL
-  
+  const navigate = useNavigate()
+
   const [concept, setConcept] = useState(null)
   const [surahs, setSurahs] = useState([])
-  const { fontSize } = useReader()
-  
+
   const [activeViewTab, setActiveViewTab] = useState('diagram')
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
@@ -59,7 +59,7 @@ export default function OntologyConceptViewPage({ isAdmin = false }) {
     setDeleting(true)
     try {
       await quranAPI.deleteOntologyConcept(conceptId)
-      window.location.href = window.location.origin + AdminOntologyViewPath(language)
+      navigate(AdminOntologyViewPath(language))
     } catch (err) {
       setError(err?.response?.data?.detail || 'Delete error.')
       setDeleting(false)
@@ -72,13 +72,12 @@ export default function OntologyConceptViewPage({ isAdmin = false }) {
         <ConceptSidebar
           title={copy.Ontology}
           activeId={conceptId}
-          language={language}
         />
       }
     >
       {isAdmin && (
         <div className="mb-4 flex gap-3">
-          <button onClick={() => window.location.href = AdminOntologyEditPath(language, concept?.id)} disabled={!concept}>
+          <button onClick={() => navigate(AdminOntologyEditPath(language, concept?.id))} disabled={!concept}>
             {copy.edit}
           </button>
           <button onClick={handleDelete} disabled={deleting} style={{ background: '#642121', color: '#fff' }}>
@@ -88,12 +87,7 @@ export default function OntologyConceptViewPage({ isAdmin = false }) {
       )}
 
       {loading ? (
-        <div className="global-spinner-wrapper flex flex-col gap-3">
-          <svg className="global-spinner" viewBox="0 0 50 50">
-            <circle className="path" cx="25" cy="25" r="20" fill="none" strokeWidth="4"></circle>
-          </svg>
-          <div className="text-muted" style={{ fontFamily: 'var(--font-serif)' }}>{copy.OntologyLoading}</div>
-        </div>
+        <Spinner label={copy.OntologyLoading} />
       ) : error ? (
         <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-red-800">{error}</div>
       ) : !concept ? (
@@ -103,24 +97,18 @@ export default function OntologyConceptViewPage({ isAdmin = false }) {
           <h1 className="reader-title mb-4" style={{ fontFamily: 'var(--font-serif)' }}>{concept.display_label}</h1>
 
           {concept.article?.type === 'diagram' && (
-            <div className="flex border-b border-[var(--color-border)] mb-6">
+            <div className="ontology-tabs">
               <button
+                type="button"
                 onClick={() => setActiveViewTab('diagram')}
-                className={`px-4 py-2.5 border-0 cursor-pointer text-sm font-semibold transition-all relative ${
-                  activeViewTab === 'diagram'
-                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-transparent'
-                    : 'bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                }`}
+                className={`ontology-tab ${activeViewTab === 'diagram' ? 'active' : ''}`}
               >
                 {copy.diagramExplorer || 'Diagram Explorer'}
               </button>
               <button
+                type="button"
                 onClick={() => setActiveViewTab('verses')}
-                className={`px-4 py-2.5 border-0 cursor-pointer text-sm font-semibold transition-all relative ${
-                  activeViewTab === 'verses'
-                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-transparent'
-                    : 'bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                }`}
+                className={`ontology-tab ${activeViewTab === 'verses' ? 'active' : ''}`}
               >
                 {copy.verseList || 'Verse List'} ({baseVerses.length})
               </button>
@@ -132,14 +120,7 @@ export default function OntologyConceptViewPage({ isAdmin = false }) {
               <OntologyDiagram data={concept.article} readOnly={true} conceptVerses={concept.verses} />
             </div>
           ) : baseVerses.length > 0 ? (
-            <>
-              <div className="mb-4 flex flex-wrap gap-4">
-                <div className="flex items-center gap-4 p-2 text-xs font-medium" style={{ background: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
-                  <div>{copy.verses || 'Verses'}: {baseVerses.length}</div>
-                </div>
-              </div>
-              <OntologyVerseList verses={baseVerses} language={language} getSurahLabel={getSurahLabel} fontSize={fontSize} />
-            </>
+            <OntologyVerseList verses={baseVerses} language={language} getSurahLabel={getSurahLabel} copy={copy} />
           ) : (
             <div className="text-center py-5" style={{ background: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-lg)' }}>
               <p className="text-muted">{copy.OntologyNotfound}</p>

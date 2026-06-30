@@ -20,7 +20,6 @@ import {
   getBibleSearchPath,
   getQuranPath,
   getQuranSearchPath,
-  AdminOntologyViewPath,
   isSupportedLanguage,
   resolveSiteLanguage,
   SITE_LANGUAGE_STORAGE_KEY

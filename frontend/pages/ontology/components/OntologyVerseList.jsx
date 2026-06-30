@@ -1,49 +1,38 @@
-import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import Verse from '../../../components/Verse'
+import SearchResultCard from '../../../components/SearchResultCard'
 import { getQuranPath } from '../../../siteLanguage'
 
 export default function OntologyVerseList({
   verses,
   language,
   getSurahLabel,
-  fontSize,
+  copy = {},
   resultKey = (verse) => `${verse._surah}:${verse._verse}`
 }) {
+  const navigate = useNavigate()
+
   return (
-    <div className="verses-list flex flex-col gap-4">
+    <div>
       {verses.map((verse) => {
         const key = resultKey(verse)
+        const verseHref = `${getQuranPath(language, verse._surah)}#verse-${verse._verse}`
 
         return (
-          <div key={key} className="block">
-            <div 
-              className="p-3" 
-              style={{ 
-                border: '1px solid var(--color-border)', 
-                borderRadius: 'var(--radius-md)', 
-                background: 'transparent',
-                transition: 'background 0.2s ease'
-              }}
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="reader-subtitle"
-                    style={{ cursor: 'pointer', color: 'var(--color-accent)' }}
-                    onClick={() => window.location.href = `${getQuranPath(language, verse._surah)}#verse-${verse._verse}`}
-                  >
-                    {getSurahLabel(verse._surah)} {verse._surah}:{verse._verse}
-                  </div>
-                </div>
-              </div>
-              <Verse 
-                verseNum={verse._verse} 
-                language={language} 
-                textAr={verse._text} 
-                fontSize={fontSize} 
-              />
-            </div>
-          </div>
+          <SearchResultCard
+            key={key}
+            label={getSurahLabel(verse._surah)}
+            reference={`${verse._surah}:${verse._verse}`}
+            onLabelClick={() => navigate(verseHref)}
+            actions={
+              <a className="verse-action-btn verse-action-btn--accent" href={verseHref}>
+                {copy.goToVerse || 'Go to verse'} →
+              </a>
+            }
+          >
+            {/* Ontology verses store Arabic source text, so always render it as Arabic. */}
+            <Verse verseNum={null} language="ar" textAr={verse._text} />
+          </SearchResultCard>
         )
       })}
     </div>

@@ -9,11 +9,16 @@ import {
   getVerseNumberValue,
   getVerseSurahLabel,
   getVerseText,
-  getSurahLabel
+  getSurahLabel,
+  formatVerseForCopy
 } from './shared'
 import ReaderLayout from '../../components/ReaderLayout'
 import Verse from '../../components/Verse'
 import ChapterSidebar from '../../components/ChapterSidebar'
+import Spinner from '../../components/Spinner'
+import SearchResultCard from '../../components/SearchResultCard'
+import RelatedTags, { getTagTerm } from '../../components/RelatedTags'
+import useCopyVerse from '../../hooks/useCopyVerse'
 
 const PER_PAGE_OPTIONS = [10, 20, 50, 100]
 
@@ -33,7 +38,8 @@ export default function QuranSearch() {
   const [expansionPage, setExpansionPage] = useState(1)
   const [expansionPerPage, setExpansionPerPage] = useState(20)
 
-  const { fontSize, setSearchQuery, setSidebarOpen } = useReader()
+  const { setSearchQuery, setSidebarOpen } = useReader()
+  const { copiedKey, copyVerse } = useCopyVerse((verse) => formatVerseForCopy(verse, surahs, language))
 
   useEffect(() => {
     quranAPI.getSurahs().then((res) => setSurahs(Array.isArray(res.data) ? res.data : [])).catch(console.error)
@@ -74,7 +80,6 @@ export default function QuranSearch() {
     navigate(getQuranTreePath(language, sourceSurahId, sourceVerseNum))
   }
 
-  const getTagTerm = (tag) => typeof tag === 'string' ? tag : tag?.term || ''
   const handleRelatedTagClick = (tag) => {
     const tagTerm = getTagTerm(tag)
     if (tagTerm) navigate(getQuranSearchPath(language, tagTerm))
@@ -107,22 +112,35 @@ export default function QuranSearch() {
   const renderVerseCard = (verse, idx) => {
     const textAr = language === 'ar' ? getVerseText(verse, 'ar') : null
     const textEn = language === 'en' ? getVerseText(verse, 'en') : null
+    const key = `${verse.suranum}:${verse.versenum}`
+    const copied = copiedKey === key
     return (
-      <div key={`${verse.suranum}:${verse.versenum}:${idx}`} style={{ marginBottom: '2rem' }}>
-        <div className="mb-2 flex justify-between">
-          <div
-            className="reader-subtitle"
-            style={{ cursor: 'pointer', color: 'var(--color-accent)' }}
-            onClick={() => navigate(`${getQuranPath(language, verse.suranum)}#verse-${verse.versenum}`)}
-          >
-            {getVerseSurahLabel(verse, surahs, language)}
-          </div>
-          <button style={{ fontSize: '0.85rem', padding: '4px 8px' }} onClick={() => handleVerseClick(verse, verse.suranum)}>
-            {copy.relatedVerses || 'Tree'}
-          </button>
-        </div>
-        <Verse verseNum={verse.versenum} language={language} textEn={textEn} textAr={textAr} textHe={null} fontSize={fontSize} />
-      </div>
+      <SearchResultCard
+        key={`${key}:${idx}`}
+        label={getVerseSurahLabel(verse, surahs, language)}
+        reference={`${verse.suranum}:${verse.versenum}`}
+        onLabelClick={() => navigate(`${getQuranPath(language, verse.suranum)}#verse-${verse.versenum}`)}
+        actions={
+          <>
+            <button
+              type="button"
+              className={`verse-action-btn${copied ? ' is-copied' : ''}`}
+              onClick={() => copyVerse(key, verse)}
+            >
+              {copied ? `✓ ${copy.copied || 'Copied'}` : (copy.copy || 'Copy')}
+            </button>
+            <button
+              type="button"
+              className="verse-action-btn"
+              onClick={() => handleVerseClick(verse, verse.suranum)}
+            >
+              ↗ {copy.relatedVerses || 'Related'}
+            </button>
+          </>
+        }
+      >
+        <Verse verseNum={null} language={language} textEn={textEn} textAr={textAr} textHe={null} />
+      </SearchResultCard>
     )
   }
 
@@ -198,12 +216,7 @@ export default function QuranSearch() {
   return (
     <ReaderLayout sidebar={sidebarContent}>
       {searching && !searchResults ? (
-        <div className="global-spinner-wrapper flex flex-col gap-3">
-          <svg className="global-spinner" viewBox="0 0 50 50">
-            <circle className="path" cx="25" cy="25" r="20" fill="none" strokeWidth="4"></circle>
-          </svg>
-          <div className="text-muted" style={{ fontFamily: 'var(--font-serif)' }}>{copy.loading}</div>
-        </div>
+        <Spinner label={copy.loading} />
       ) : searchResults !== null ? (
         <div>
           <div className="mb-4">
@@ -220,18 +233,7 @@ export default function QuranSearch() {
             </div>
           </div>
 
-          {relatedTags.length > 0 && (
-            <div className="mb-4 flex flex-wrap gap-2">
-              {relatedTags.map((tag) => (
-                <button key={getTagTerm(tag)} type="button" onClick={() => handleRelatedTagClick(tag)}>
-                  {getTagTerm(tag)}
-                  {typeof tag === 'object' && typeof tag?.count === 'number' && (
-                    <span className="ms-2 text-muted text-sm">{tag.count}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+          <RelatedTags tags={relatedTags} onSelect={handleRelatedTagClick} />
 
           {searchResults.search_info?.stopword_only ? (
             <div className="mb-4 rounded-md border px-4 py-3" style={{ backgroundColor: 'var(--color-bg-secondary)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>

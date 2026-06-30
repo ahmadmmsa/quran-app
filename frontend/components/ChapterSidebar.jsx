@@ -1,4 +1,5 @@
 import { useLanguage } from '../LanguageContext'
+import { clickableProps } from './a11y'
 
 export default function ChapterSidebar({
   title,
@@ -19,7 +20,7 @@ export default function ChapterSidebar({
           <li
             key={item.id}
             className={`reader-sidebar-item ${item.id === activeId ? 'active' : ''}`}
-            onClick={() => onSelect(item.id)}
+            {...clickableProps(() => onSelect(item.id))}
           >
             {item.label}
           </li>
