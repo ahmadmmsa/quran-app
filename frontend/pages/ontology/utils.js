@@ -1,3 +1,5 @@
+import { getSurahLabel as getSurahName } from '../quran/shared'
+
 export function normalizeVerse(verse) {
   const surah = Number(verse?.suraid ?? verse?.surah ?? verse?._surah ?? 0)
   const verseNum = Number(verse?.verse_num ?? verse?.verse ?? verse?._verse ?? 0)
@@ -13,8 +15,5 @@ export function normalizeVerse(verse) {
 
 export function getSurahLabel(surahId, surahs, language) {
   const surah = (Array.isArray(surahs) ? surahs : []).find((item) => Number(item.suraid) === Number(surahId))
-  if (!surah) return `سورة ${surahId}` // Fallback Arabic
-  if (language === 'ar') return surah.name_ar || surah.name_en || ''
-  if (language === 'he') return surah.name_he || surah.name_en || surah.name_ar || ''
-  return surah.name_en || surah.name_ar || ''
+  return surah ? getSurahName(surah, language) : `سورة ${surahId}` // Fallback Arabic
 }

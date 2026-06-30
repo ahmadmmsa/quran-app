@@ -17,6 +17,7 @@ import Verse from '../../components/Verse'
 import ChapterSidebar from '../../components/ChapterSidebar'
 import Spinner from '../../components/Spinner'
 import SearchResultCard from '../../components/SearchResultCard'
+import CopyVerseButton from '../../components/CopyVerseButton'
 import RelatedTags, { getTagTerm } from '../../components/RelatedTags'
 import useCopyVerse from '../../hooks/useCopyVerse'
 
@@ -113,7 +114,6 @@ export default function QuranSearch() {
     const textAr = language === 'ar' ? getVerseText(verse, 'ar') : null
     const textEn = language === 'en' ? getVerseText(verse, 'en') : null
     const key = `${verse.suranum}:${verse.versenum}`
-    const copied = copiedKey === key
     return (
       <SearchResultCard
         key={`${key}:${idx}`}
@@ -122,13 +122,7 @@ export default function QuranSearch() {
         onLabelClick={() => navigate(`${getQuranPath(language, verse.suranum)}#verse-${verse.versenum}`)}
         actions={
           <>
-            <button
-              type="button"
-              className={`verse-action-btn${copied ? ' is-copied' : ''}`}
-              onClick={() => copyVerse(key, verse)}
-            >
-              {copied ? `✓ ${copy.copied || 'Copied'}` : (copy.copy || 'Copy')}
-            </button>
+            <CopyVerseButton isCopied={copiedKey === key} onClick={() => copyVerse(key, verse)} copy={copy} />
             <button
               type="button"
               className="verse-action-btn"

@@ -34,11 +34,7 @@ export default function OntologyConceptViewPage({ isAdmin = false }) {
     quranAPI.getOntologyConcept(conceptId)
       .then((response) => {
         setConcept(response.data)
-        if (response.data?.article?.type === 'diagram') {
-          setActiveViewTab('diagram')
-        } else {
-          setActiveViewTab('verses')
-        }
+        setActiveViewTab(response.data?.article?.type === 'diagram' ? 'diagram' : 'verses')
       })
       .catch((requestError) => {
         setError(requestError?.response?.data?.detail || (isRtl ? 'تعذر تحميل المفهوم.' : 'Could not load concept.'))
@@ -117,7 +113,7 @@ export default function OntologyConceptViewPage({ isAdmin = false }) {
 
           {activeViewTab === 'diagram' && concept.article?.type === 'diagram' ? (
             <div className="mb-6">
-              <OntologyDiagram data={concept.article} readOnly={true} conceptVerses={concept.verses} />
+              <OntologyDiagram data={concept.article} readOnly conceptVerses={concept.verses} />
             </div>
           ) : baseVerses.length > 0 ? (
             <OntologyVerseList verses={baseVerses} language={language} getSurahLabel={getSurahLabel} copy={copy} />

@@ -3,11 +3,10 @@ const ARABIC_NUMS = '٠١٢٣٤٥٦٧٨٩';
 const toArabicIndic = (num) => String(num ?? "").replace(/\d/g, d => ARABIC_NUMS[d]);
 export const formatVerseNumber = (num, language) => language === 'ar' ? toArabicIndic(num) : String(num ?? '')
 
+const SURAH_NAME_ORDER = { ar: ['name_ar', 'name_en', 'name_he'], he: ['name_he', 'name_en', 'name_ar'] }
 export const getSurahLabel = (surah, language) => {
   if (!surah) return ''
-  if (language === 'ar') return surah.name_ar || surah.name_en || surah.name_he || ''
-  if (language === 'he') return surah.name_he || surah.name_en || surah.name_ar || ''
-  return surah.name_en || surah.name_ar || surah.name_he || ''
+  return (SURAH_NAME_ORDER[language] || ['name_en', 'name_ar', 'name_he']).map((key) => surah[key]).find(Boolean) || ''
 }
 
 export const getVerseSurahId = (verse, overrideSurahId, fallbackSurahId) => overrideSurahId ?? verse?.suraid ?? verse?.suranum ?? parseInt(fallbackSurahId)
@@ -24,11 +23,11 @@ const getArabicVerseText = (verse) => {
   return verse.verse_txt || verse.verse_txt_raw || verse.verse_txt_en || verse.verse_txt_he || ''
 }
 
+const VERSE_TEXT_ORDER = { he: ['verse_txt_he', 'verse_txt_en', 'verse_txt'] }
 export const getVerseText = (verse, language) => {
   if (!verse) return ''
   if (language === 'ar') return getArabicVerseText(verse)
-  if (language === 'he') return verse.verse_txt_he || verse.verse_txt_en || verse.verse_txt || ''
-  return verse.verse_txt_en || verse.verse_txt || verse.verse_txt_he || ''
+  return (VERSE_TEXT_ORDER[language] || ['verse_txt_en', 'verse_txt', 'verse_txt_he']).map((key) => verse[key]).find(Boolean) || ''
 }
 
 // Builds a clean, paste-friendly block: surah label + reference, the verse, an

@@ -22,6 +22,8 @@ type LanguageContextValue = {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null)
 
+const FALLBACK_COPY: LanguageCopy = { loading: 'Loading...' }
+
 function getStoredLanguage() {
   return resolveSiteLanguage(
     localStorage.getItem(SITE_LANGUAGE_STORAGE_KEY),
@@ -41,8 +43,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const [locales, setLocales] = useState<Record<Language, LanguageCopy>>({});
   const [copy, setCopy] = useState<LanguageCopy>({});
-  
-  const fallbackCopy = { "loading": "Loading..." }; 
+
+  const hasLocales = Object.keys(locales).length > 0
 
   useEffect(() => {
     fetch('/locales.json')
@@ -52,16 +54,16 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       })
       .catch(e => {
         console.error("Failed to load locales.json", e);
-        setCopy(fallbackCopy);
+        setCopy(FALLBACK_COPY);
       });
   }, []);
 
   // Single owner of `copy`: pick the active language once locales are loaded,
   // falling back to English then the minimal fallback.
   useEffect(() => {
-    if (Object.keys(locales).length === 0) return;
-    setCopy(locales[language] || locales.en || fallbackCopy);
-  }, [language, locales]);
+    if (!hasLocales) return;
+    setCopy(locales[language] || locales.en || FALLBACK_COPY);
+  }, [language, locales, hasLocales]);
 
   useEffect(() => {
     localStorage.setItem(SITE_LANGUAGE_STORAGE_KEY, language)
@@ -92,7 +94,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }
 
   // Prevent app from rendering without language strings loaded to avoid layout jumps
-  if (Object.keys(locales).length === 0) {
+  if (!hasLocales) {
      return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', width: '100vw'}}>Loading...</div>;
   }
 

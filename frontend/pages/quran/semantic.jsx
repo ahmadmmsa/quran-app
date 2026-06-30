@@ -15,6 +15,7 @@ import Verse from '../../components/Verse'
 import ChapterSidebar from '../../components/ChapterSidebar'
 import Spinner from '../../components/Spinner'
 import SearchResultCard from '../../components/SearchResultCard'
+import CopyVerseButton from '../../components/CopyVerseButton'
 import { useReader } from '../../ReaderContext'
 import useCopyVerse from '../../hooks/useCopyVerse'
 
@@ -149,7 +150,6 @@ export default function QuranSemantic() {
           {relatedResults.length > 0 ? (
             relatedResults.map((verse) => {
               const key = `${verse.suranum}:${verse.versenum}`
-              const copied = copiedKey === key
               const verseHref = `${getQuranPath(language, verse.suranum)}#verse-${verse.versenum}`
               return (
                 <SearchResultCard
@@ -159,13 +159,7 @@ export default function QuranSemantic() {
                   onLabelClick={() => navigate(verseHref)}
                   actions={
                     <>
-                      <button
-                        type="button"
-                        className={`verse-action-btn${copied ? ' is-copied' : ''}`}
-                        onClick={() => copyVerse(key, verse)}
-                      >
-                        {copied ? `✓ ${copy.copied || 'Copied'}` : (copy.copy || 'Copy')}
-                      </button>
+                      <CopyVerseButton isCopied={copiedKey === key} onClick={() => copyVerse(key, verse)} copy={copy} />
                       <a className="verse-action-btn verse-action-btn--accent" href={verseHref}>
                         {copy.goToVerse || 'Go to verse'} →
                       </a>

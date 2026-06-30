@@ -9,6 +9,7 @@ import ChapterSidebar from '../components/ChapterSidebar'
 import Verse from '../components/Verse'
 import Spinner from '../components/Spinner'
 import SearchResultCard from '../components/SearchResultCard'
+import CopyVerseButton from '../components/CopyVerseButton'
 import RelatedTags, { getTagTerm } from '../components/RelatedTags'
 import useCopyVerse from '../hooks/useCopyVerse'
 
@@ -157,7 +158,6 @@ export default function BibleReader() {
             <div>
               {searchResults.results.map((verse) => {
                 const key = `${verse.Book}:${verse.Chapter}:${verse.verse_number}`
-                const copied = copiedKey === key
                 return (
                   <SearchResultCard
                     key={key}
@@ -166,13 +166,7 @@ export default function BibleReader() {
                     onLabelClick={() => navigate(getBiblePath(language, verse.Book, verse.Chapter))}
                     actions={
                       <>
-                        <button
-                          type="button"
-                          className={`verse-action-btn${copied ? ' is-copied' : ''}`}
-                          onClick={() => copyVerse(key, verse)}
-                        >
-                          {copied ? `✓ ${copy.copied || 'Copied'}` : (copy.copy || 'Copy')}
-                        </button>
+                        <CopyVerseButton isCopied={copiedKey === key} onClick={() => copyVerse(key, verse)} copy={copy} />
                         <button
                           type="button"
                           className="verse-action-btn verse-action-btn--accent"

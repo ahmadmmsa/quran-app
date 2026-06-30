@@ -23,15 +23,13 @@ function AppContent() {
 
   const handleLanguageChange = (event) => setLanguage(event.target.value);
   const handleSearchSubmit = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
+    e?.preventDefault?.();
     const trimmedQuery = searchQuery.trim();
     if (!trimmedQuery) return;
-    if (isBibleRoute) {
-      navigate(getBibleSearchPath(language, trimmedQuery));
-    } else {
-      navigate(getQuranSearchPath(language, trimmedQuery));
-    }
+    navigate(isBibleRoute ? getBibleSearchPath(language, trimmedQuery) : getQuranSearchPath(language, trimmedQuery));
   };
+
+  const headerLinkStyle = { color: 'white', textDecoration: 'none', fontWeight: 'bold' };
 
   return (
     <div className={`app-shell ${isRTL ? 'app-shell--rtl' : 'app-shell--ltr'}`}>
@@ -50,11 +48,11 @@ function AppContent() {
           <div className="flex items-center gap-3">
             {isAuthenticated ? (
               <>
-                <Link to="/admin" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{copy.AdminPanel}</Link>
+                <Link to="/admin" style={headerLinkStyle}>{copy.AdminPanel}</Link>
                 <button onClick={logout} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{copy.Logout}</button>
               </>
             ) : (
-              <Link to="/admin/login" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{copy.Login}</Link>
+              <Link to="/admin/login" style={headerLinkStyle}>{copy.Login}</Link>
             )}
             <button className="theme-toggle" onClick={toggleTheme} aria-label={copy.toggleTheme || "Toggle theme"}>
               {theme === 'light' ? copy.themeDarkMode : copy.themeLightMode}

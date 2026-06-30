@@ -4,7 +4,7 @@ import { quranAPI } from '../api'
 import { OntologyConceptPath, OntologyViewPath } from '../siteLanguage'
 import { useLanguage } from '../LanguageContext'
 import { useReader } from '../ReaderContext'
-import { clickableProps } from './a11y'
+import SidebarItem from './SidebarItem'
 
 export default function ConceptSidebar({
   title,
@@ -30,13 +30,12 @@ export default function ConceptSidebar({
       </div>
       <ul className="reader-sidebar-list">
         {concepts.map(concept => (
-          <li
+          <SidebarItem
             key={concept.id}
-            className={`reader-sidebar-item ${concept.id === activeId ? 'active' : ''}`}
-            {...clickableProps(() => navigate(OntologyConceptPath(language, concept.id)))}
-          >
-            {concept.display_label}
-          </li>
+            label={concept.display_label}
+            isActive={concept.id === activeId}
+            onSelect={() => navigate(OntologyConceptPath(language, concept.id))}
+          />
         ))}
       </ul>
     </>

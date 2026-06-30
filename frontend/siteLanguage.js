@@ -37,15 +37,16 @@ export function getHomePath(language) {
   return buildLocalizedPath(language, '/');}
 export function getBiblePath(language, bookId = '0', chapterId = '1') {
   return buildLocalizedPath(language, `/bible/${bookId}/${chapterId}`);}
+const encodeTerm = (term) => encodeURIComponent(String(term || '').trim());
 export function getBibleSearchPath(language, term) {
-  return buildLocalizedPath(language, `/bible/search/${encodeURIComponent(String(term || '').trim())}`);}
+  return buildLocalizedPath(language, `/bible/search/${encodeTerm(term)}`);}
 
 export function getQuranPath(language, surahId = '1') {
   return buildLocalizedPath(language, `/quran/${surahId}`);}
 export function getQuranTreePath(language, surahId, verseNum) {
   return buildLocalizedPath(language, `/quran/tree/${surahId}/${verseNum}`);}
 export function getQuranSearchPath(language, term) {
-  return buildLocalizedPath(language, `/quran/search/${encodeURIComponent(String(term || '').trim())}`);}
+  return buildLocalizedPath(language, `/quran/search/${encodeTerm(term)}`);}
 
 export function OntologyViewPath(language) {
   return buildLocalizedPath(language, '/quran/ontology/concepts');}

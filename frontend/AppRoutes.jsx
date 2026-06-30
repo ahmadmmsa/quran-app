@@ -135,8 +135,8 @@ export default function AppRoutes() {
               <Route index element={<Navigate to="localization" replace />} />
               <Route path="localization" element={<LocalizationEditor />} />
               <Route path="ontology" element={<OntologyAddPage />} />
-              <Route path="ontology/concepts" element={<OntologyViewPage isAdmin={true} />} />
-              <Route path="ontology/concepts/:conceptId/view" element={<OntologyConceptViewPage isAdmin={true} />} />
+              <Route path="ontology/concepts" element={<OntologyViewPage isAdmin />} />
+              <Route path="ontology/concepts/:conceptId/view" element={<OntologyConceptViewPage isAdmin />} />
               <Route path="ontology/concepts/:conceptId" element={<OntologyEditPage />} />
             </Route>
           </Route>

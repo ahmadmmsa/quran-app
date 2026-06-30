@@ -44,8 +44,6 @@
   justify-content: center;
 }
 .sidebar-toggle-open:hover {
-  background: none;
-  border: none;
   opacity: 0.8;
 }
 .sidebar-toggle-close {
@@ -359,12 +357,14 @@
 }
 
 /* Drop the standalone verse spacing when shown inside a search result */
-.search-result .verse-container {
+.search-result .verse-container,
+.tree-source-card .verse-container {
   margin-bottom: 0;
   padding: 0;
   cursor: default;
 }
-.search-result .verse-container:hover {
+.search-result .verse-container:hover,
+.tree-source-card .verse-container:hover {
   background: transparent;
 }
 
@@ -431,14 +431,6 @@
   border-radius: 999px;
   padding: 3px 11px;
   white-space: nowrap;
-}
-.tree-source-card .verse-container {
-  margin-bottom: 0;
-  padding: 0;
-  cursor: default;
-}
-.tree-source-card .verse-container:hover {
-  background: transparent;
 }
 .tree-terms {
   display: flex;
@@ -514,7 +506,8 @@
   padding: 6px 12px;
   cursor: pointer;
 }
-.chapter-pager-nav:hover {
+.chapter-pager-nav:hover,
+.chapter-chip:hover {
   background: var(--color-bg-hover);
   text-decoration: none;
 }
@@ -549,10 +542,6 @@
   border-radius: var(--radius-sm);
   padding: 0;
   cursor: pointer;
-}
-.chapter-chip:hover {
-  background: var(--color-bg-hover);
-  text-decoration: none;
 }
 .chapter-chip.active,
 .chapter-chip.active:hover {

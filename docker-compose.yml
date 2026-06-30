@@ -24,7 +24,7 @@ services:
 
   db:
     image: pgvector/pgvector:pg18
-    container_name: postgres_event
+    container_name: postgres_quran
     restart: unless-stopped
     environment:
       - POSTGRES_USER=quran

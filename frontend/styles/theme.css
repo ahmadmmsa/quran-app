@@ -146,12 +146,7 @@ button:hover {
   text-decoration: underline;
 }
 
-html {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border) var(--color-bg-primary);
-}
-
-body {
+html, body {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) var(--color-bg-primary);
 }
